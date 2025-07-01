@@ -1,0 +1,56 @@
+<?php
+
+namespace App\Http\Controllers\API;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\Post;
+use App\Models\PostLike;
+use App\Models\PostTag;
+use App\Models\Comment;
+use App\Models\CommentLike;
+use App\Models\Reply;
+use App\Models\Follow;
+use App\Models\EventCategory;
+use Illuminate\Support\Facades\Auth;
+
+class FollowController extends Controller {
+    // public function follow($id) {
+    //     if (auth()->id() == $id) return response()->json(['message' => 'Cannot follow yourself'], 400);
+    //     Follow::firstOrCreate(['follower_id' => auth()->id(), 'following_id' => $id]);
+    //     return response()->json(['message' => 'Followed']);
+    // }
+
+    // public function unfollow($id) {
+    //     Follow::where(['follower_id' => auth()->id(), 'following_id' => $id])->delete();
+    //     return response()->json(['message' => 'Unfollowed']);
+    // }
+
+       public function toggleFollow($id) {
+        if (auth()->id() == $id) return response()->json(['message' => 'Cannot follow yourself'], 400);
+
+        $follow = Follow::where('follower_id', auth()->id())->where('following_id', $id)->first();
+        if ($follow) {
+            $follow->delete();
+            return response()->json(['message' => 'Unfollowed']);
+        } else {
+            Follow::create(['follower_id' => auth()->id(), 'following_id' => $id]);
+            return response()->json(['message' => 'Followed']);
+        }
+    }
+
+    public function followers() {
+        return auth()->user()->followers()->with('follower')->get();
+    }
+
+    public function following() {
+        return auth()->user()->following()->with('following')->get();
+    }
+
+    public function myNetwork() {
+        return [
+            'followers' => auth()->user()->followers()->with('follower')->get(),
+            'following' => auth()->user()->following()->with('following')->get(),
+        ];
+    }
+}

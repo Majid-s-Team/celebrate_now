@@ -1,0 +1,49 @@
+<?php
+
+namespace App\Http\Controllers\API\Auth;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
+use App\Models\User;
+use App\Models\UserOtp;
+use Illuminate\Support\Facades\Hash;
+use Carbon\Carbon;
+
+class OTPController extends Controller
+{
+    public function getOtp(Request $request)
+    {
+        $request->validate(['email' => 'required|email']);
+
+        $user = User::where('email', $request->email)->firstOrFail();
+        $otp = rand(100000, 999999);
+
+        UserOtp::updateOrCreate(
+            ['user_id' => $user->id],
+            ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
+        );
+
+        return response()->json(['message' => 'OTP sent (dev)', 'otp' => $otp]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'otp' => 'required',
+            'password' => 'required|confirmed|min:6'
+        ]);
+
+        $user = User::where('email', $request->email)->firstOrFail();
+        $otpRecord = UserOtp::where('user_id', $user->id)->where('otp', $request->otp)->first();
+
+        if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
+            return response()->json(['message' => 'Invalid or expired OTP'], 400);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+        $otpRecord->delete();
+
+        return response()->json(['message' => 'Password reset successful']);
+    }
+}
