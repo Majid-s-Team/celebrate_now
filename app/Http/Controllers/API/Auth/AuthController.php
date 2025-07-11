@@ -13,18 +13,20 @@ use App\Traits\ImageUploadTrait;
 
 class AuthController extends Controller
 {
-        use ImageUploadTrait;
+    use ImageUploadTrait;
 
 
     public function register(Request $request)
     {
         $request->validate([
-            'name' => 'required|string',
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
             'email' => 'required|email|unique:users',
             'contact_no' => 'nullable|string|unique:users',
             'profile_type' => ['required', Rule::in(['private', 'public'])],
+            'dob' => 'nullable|date',
             'password' => 'required|confirmed|min:6',
-            'profile_image' => 'nullable|url', // Expecting uploaded URL
+            'profile_image' => 'nullable|url',
         ]);
 
         $exists = User::withTrashed()
@@ -40,21 +42,22 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'name' => $request->name,
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
             'email' => $request->email,
             'contact_no' => $request->contact_no,
             'profile_type' => $request->profile_type,
+            'dob' => $request->dob,
             'password' => Hash::make($request->password),
             'role' => 'user',
             'profile_image' => $request->profile_image,
             'is_active' => true,
         ]);
-
         // return response()->json([
         //     'token' => $user->createToken('API Token')->plainTextToken,
         //     'user' => $user
         // ], 201);
-           return $this->sendResponse('User registered successfully', [
+        return $this->sendResponse('User registered successfully', [
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ], 201);
@@ -77,7 +80,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated. Contact support.'], 403);
         }
 
-       return $this->sendResponse('Login successful', [
+        return $this->sendResponse('Login successful', [
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ]);
@@ -89,23 +92,24 @@ class AuthController extends Controller
         // dd($request);
 
         $request->validate([
-            'name' => 'nullable|string',
+            'first_name' => 'nullable|string',
+            'last_name' => 'nullable|string',
             'contact_no' => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
             'profile_type' => ['nullable', Rule::in(['private', 'public'])],
+            'dob' => 'nullable|date',
             'profile_image' => 'nullable|url',
         ]);
-
-        $user->update($request->only('name', 'contact_no', 'profile_type', 'profile_image'));
+        $user->update($request->only('first_name', 'last_name', 'contact_no', 'profile_type', 'dob', 'profile_image'));
 
         // return response()->json(['message' => 'Profile updated', 'user' => $user]);
-                return $this->sendResponse('Profile updated', $user);
+        return $this->sendResponse('Profile updated', $user);
 
     }
 
-   public function uploadImage(Request $request)
+    public function uploadImage(Request $request)
     {
         $request->validate([
-            'key'   => 'required|string|in:profile,cover,post,gallery,logo',
+            'key' => 'required|string|in:profile,cover,post,gallery,logo',
             'image' => 'required|image|max:2048',
         ]);
 
