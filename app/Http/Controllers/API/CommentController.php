@@ -24,7 +24,9 @@ class CommentController extends Controller {
             'body' => $request->body,
             'emojis' => $request->emojis
         ]);
-        return response()->json($comment);
+        // return response()->json($comment);
+        return $this->sendResponse('Comment posted successfully', $comment, 201);
+
     }
 
     // public function like($id) {
@@ -35,10 +37,14 @@ class CommentController extends Controller {
         $like = CommentLike::where('comment_id', $id)->where('user_id', auth()->id())->first();
         if ($like) {
             $like->delete();
-            return response()->json(['message' => 'Unliked']);
+            // return response()->json(['message' => 'Unliked']);
+            return $this->sendResponse('Comment unliked');
+
         } else {
             CommentLike::create(['comment_id' => $id, 'user_id' => auth()->id()]);
-            return response()->json(['message' => 'Liked']);
+            // return response()->json(['message' => 'Liked']);
+            return $this->sendResponse('Comment liked');
+
         }
     }
 
@@ -50,6 +56,8 @@ class CommentController extends Controller {
             'body' => $request->body,
             'emojis' => $request->emojis
         ]);
-        return response()->json($reply);
+        // return response()->json($reply);
+        return $this->sendResponse('Reply posted successfully', $reply, 201);
+
     }
 }

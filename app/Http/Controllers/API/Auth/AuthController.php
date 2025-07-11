@@ -50,7 +50,11 @@ class AuthController extends Controller
             'is_active' => true,
         ]);
 
-        return response()->json([
+        // return response()->json([
+        //     'token' => $user->createToken('API Token')->plainTextToken,
+        //     'user' => $user
+        // ], 201);
+           return $this->sendResponse('User registered successfully', [
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ], 201);
@@ -73,7 +77,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Account is deactivated. Contact support.'], 403);
         }
 
-        return response()->json([
+       return $this->sendResponse('Login successful', [
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ]);
@@ -93,7 +97,9 @@ class AuthController extends Controller
 
         $user->update($request->only('name', 'contact_no', 'profile_type', 'profile_image'));
 
-        return response()->json(['message' => 'Profile updated', 'user' => $user]);
+        // return response()->json(['message' => 'Profile updated', 'user' => $user]);
+                return $this->sendResponse('Profile updated', $user);
+
     }
 
    public function uploadImage(Request $request)
@@ -105,10 +111,12 @@ class AuthController extends Controller
 
         $url = $this->uploadImageByKey($request->file('image'), $request->key);
 
-        return response()->json([
-            'url' => $url,
-            'message' => 'Image uploaded successfully'
-        ], 201);
+        // return response()->json([
+        //     'url' => $url,
+        //     'message' => 'Image uploaded successfully'
+        // ], 201);
+        return $this->sendResponse('Image uploaded successfully', ['url' => $url], 201);
+
     }
 
 
@@ -116,12 +124,16 @@ class AuthController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-        return response()->json(['message' => 'Logged out successfully']);
+        // return response()->json(['message' => 'Logged out successfully']);
+        return $this->sendResponse('Logged out successfully');
+
     }
 
     public function profile()
     {
-        return response()->json(auth()->user());
+        // return response()->json(auth()->user());
+        return $this->sendResponse('Profile fetched', auth()->user());
+
     }
 
 
@@ -141,7 +153,9 @@ class AuthController extends Controller
             'password' => Hash::make($request->new_password)
         ]);
 
-        return response()->json(['message' => 'Password updated successfully']);
+        // return response()->json(['message' => 'Password updated successfully']);
+        return $this->sendResponse('Password updated successfully');
+
     }
 
     public function deactivate()
@@ -151,6 +165,8 @@ class AuthController extends Controller
         $user->tokens()->delete();
         $user->save();
 
-        return response()->json(['message' => 'Account deactivated']);
+        // return response()->json(['message' => 'Account deactivated']);
+        return $this->sendResponse('Account deactivated');
+
     }
 }

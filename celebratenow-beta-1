@@ -1,0 +1,1214 @@
+{
+	"info": {
+		"_postman_id": "7d8f8eef-8957-4fc7-8368-21dfa4331471",
+		"name": "Celebrate Now",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "38717511",
+		"_collection_link": "https://neat-net-team.postman.co/workspace/Hasan-Raza-WorkSpace~e83a1294-f679-4cfd-8681-d69fa0d4d2ee/collection/38717511-7d8f8eef-8957-4fc7-8368-21dfa4331471?action=share&source=collection_link&creator=38717511"
+	},
+	"item": [
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"name\": \"Ali Raza\",\r\n  \"email\": \"user4@celebratenow.com\",\r\n  \"contact_no\": \"011201234567\",\r\n  \"profile_type\": \"public\",\r\n  \"password\": \"12345678\",\r\n  \"password_confirmation\": \"12345678\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}register",
+							"host": [
+								"{{baseUrl}}register"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n//   \"name\": \"Hasan Raza\",\r\n//   \"email\": \"hasan@celebratenow.com\",\r\n  \"email\": \"user4@celebratenow.com\",\r\n//   \"contact_no\": \"03001234567\",\r\n//   \"profile_type\": \"public\",\r\n//   \"password\": \"newpassword123\"\r\n  \"password\": \"12345678\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}login",
+							"host": [
+								"{{baseUrl}}login"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n//   \"name\": \"Hasan Raza\",\r\n  \"email\": \"hasan@celebratenow.com\",\r\n//   \"contact_no\": \"03001234567\",\r\n//   \"profile_type\": \"public\",\r\n  \"password\": \"12345678\"\r\n//   \"password_confirmation\": \"12345678\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}logout",
+							"host": [
+								"{{baseUrl}}logout"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Profile",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n//   \"name\": \"Hasan Raza\",\r\n  \"email\": \"hasan@celebratenow.com\",\r\n//   \"contact_no\": \"03001234567\",\r\n//   \"profile_type\": \"public\",\r\n  \"password\": \"12345678\"\r\n//   \"password_confirmation\": \"12345678\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}profile",
+							"host": [
+								"{{baseUrl}}profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"Hasan Raza\",\r\n    \"email\": \"hasan@celebratenow.com\",\r\n    \"contact_no\": \"03001214567\",\r\n    \"profile_type\": \"public\",\r\n    \"password\": \"12345678\",\r\n    \"profile_image\" : \"http://127.0.0.1:8000/storage/profile_images/8kAqcbQIkLYM55rDZ2X0FRnIXOPHSge15PUfc0rQ.jpg\"\r\n    //   \"password_confirmation\": \"12345678\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}update-profile",
+							"host": [
+								"{{baseUrl}}update-profile"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": "/C:/Users/hasan.raza/Pictures/Camera Roll/WIN_20250501_16_35_31_Pro.jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}upload-image",
+							"host": [
+								"{{baseUrl}}upload-image"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Deactivate Profile",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n    \"name\": \"Hasan Raza\",\r\n    \"email\": \"hasan@celebratenow.com\",\r\n    \"contact_no\": \"03001214567\",\r\n    \"profile_type\": \"public\",\r\n    \"password\": \"12345678\"\r\n    //   \"password_confirmation\": \"12345678\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}deactivate",
+							"host": [
+								"{{baseUrl}}deactivate"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Change Password",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"old_password\": \"12345678\",\r\n  \"new_password\": \"123456781\",\r\n  \"new_password_confirmation\": \"123456781\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}change-password",
+							"host": [
+								"{{baseUrl}}change-password"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get OTP (Forgot Password)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"hasan@celebratenow.com\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}get-otp",
+							"host": [
+								"{{baseUrl}}get-otp"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password Using OTP",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text",
+								"disabled": true
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"email\": \"hasan@celebratenow.com\",\r\n  \"otp\": \"672576\",\r\n  \"password\": \"newpassword123\",\r\n  \"password_confirmation\": \"newpassword123\"\r\n}\r\n",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}reset-password",
+							"host": [
+								"{{baseUrl}}reset-password"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post",
+			"item": [
+				{
+					"name": "Create Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"caption\": \"Celebrating art and colors!\",\r\n  \"photo\": \"https://yourdomain.com/storage/post_images/img123.jpg\",\r\n  \"event_category_id\": 1,\r\n  \"privacy\": \"public\",\r\n  \"tag_user_ids\": [2, 3]\r\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts",
+							"host": [
+								"{{baseUrl}}posts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Posts",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "caption",
+									"value": " Enjoying the sunset!",
+									"type": "text"
+								},
+								{
+									"key": "photo",
+									"value": " sample.jpg (file upload)",
+									"type": "text"
+								},
+								{
+									"key": "event_category_id",
+									"value": " 2",
+									"type": "text"
+								},
+								{
+									"key": "privacy",
+									"value": " public",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 4",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 5",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts",
+							"host": [
+								"{{baseUrl}}posts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Post with Count",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "caption",
+									"value": " Enjoying the sunset!",
+									"type": "text"
+								},
+								{
+									"key": "photo",
+									"value": " sample.jpg (file upload)",
+									"type": "text"
+								},
+								{
+									"key": "event_category_id",
+									"value": " 2",
+									"type": "text"
+								},
+								{
+									"key": "privacy",
+									"value": " public",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 4",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 5",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts/1/with-counts",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1",
+								"with-counts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Show Single Post",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "caption",
+									"value": " Enjoying the sunset!",
+									"type": "text"
+								},
+								{
+									"key": "photo",
+									"value": " sample.jpg (file upload)",
+									"type": "text"
+								},
+								{
+									"key": "event_category_id",
+									"value": " 2",
+									"type": "text"
+								},
+								{
+									"key": "privacy",
+									"value": " public",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 4",
+									"type": "text"
+								},
+								{
+									"key": "tag_user_ids[]",
+									"value": " 5",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts/1",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Event Category",
+			"item": [
+				{
+					"name": "Create Event Category",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "name",
+									"value": "Others",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}event-categories",
+							"host": [
+								"{{baseUrl}}event-categories"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Event Category",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "name",
+									"value": " Art Exhibition",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}event-categories/1",
+							"host": [
+								"{{baseUrl}}event-categories"
+							],
+							"path": [
+								"1"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Event Category",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "name",
+									"value": " Art Exhibition",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}event-categories/2",
+							"host": [
+								"{{baseUrl}}event-categories"
+							],
+							"path": [
+								"2"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Likes/Comments/Replies/Tag",
+			"item": [
+				{
+					"name": "Like a Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token_2}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}posts/1/like",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1",
+								"like"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Tag People to Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"user_ids\": [4, 5]\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts/1/tag",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1",
+								"tag"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Comment on a Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token_2}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"body\": \"Wow! Looks amazing 😍\",\r\n  \"emojis\": [\"🔥\", \"🎉\"]\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts/1/comment",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1",
+								"comment"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Reply to a Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n  \"body\": \"Absolutely agree!\",\r\n  \"emojis\": [\"👌\"]\r\n}\r\n"
+						},
+						"url": {
+							"raw": "{{baseUrl}}comments/1/reply",
+							"host": [
+								"{{baseUrl}}comments"
+							],
+							"path": [
+								"1",
+								"reply"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Like a Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}comments/1/like",
+							"host": [
+								"{{baseUrl}}comments"
+							],
+							"path": [
+								"1",
+								"like"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Follow/Unfollow",
+			"item": [
+				{
+					"name": "Follow a User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}follow/2",
+							"host": [
+								"{{baseUrl}}follow"
+							],
+							"path": [
+								"2"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Unfollow a User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}unfollow/3",
+							"host": [
+								"{{baseUrl}}unfollow"
+							],
+							"path": [
+								"3"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Followers",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}followers",
+							"host": [
+								"{{baseUrl}}followers"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Followings",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}following",
+							"host": [
+								"{{baseUrl}}following"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "All Followers and Followings",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}my-network",
+							"host": [
+								"{{baseUrl}}my-network"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Feeds",
+			"item": [
+				{
+					"name": "Those I follow (public + private)",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}feed/following-posts",
+							"host": [
+								"{{baseUrl}}feed"
+							],
+							"path": [
+								"following-posts"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "One post with comments, replies, likes, tagged users",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}posts/1/details",
+							"host": [
+								"{{baseUrl}}posts"
+							],
+							"path": [
+								"1",
+								"details"
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "All public posts with counts",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Accept",
+								"value": "application/json",
+								"type": "text"
+							},
+							{
+								"key": "Authorization",
+								"value": "{{token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "urlencoded",
+							"urlencoded": [
+								{
+									"key": "body",
+									"value": " Absolutely agree!",
+									"type": "text"
+								},
+								{
+									"key": "emojis[]",
+									"value": " 🙌",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}feed/all-posts",
+							"host": [
+								"{{baseUrl}}feed"
+							],
+							"path": [
+								"all-posts"
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

@@ -18,7 +18,9 @@ class PostController extends Controller
 {
     public function index()
     {
-        return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
+        // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
+        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
+        return $this->sendResponse('Posts fetched successfully', $posts);
     }
 
     public function store(Request $request)
@@ -49,12 +51,16 @@ class PostController extends Controller
             }
         }
 
-        return response()->json($post);
+        // return response()->json($post);
+        return $this->sendResponse('Post created successfully', $post, 201);
+
     }
 
     public function show($id)
     {
-        return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
+        // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
+        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
+        return $this->sendResponse('Post fetched successfully', $post);
     }
 
     // public function like($id) {
@@ -67,10 +73,14 @@ class PostController extends Controller
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
         if ($like) {
             $like->delete();
-            return response()->json(['message' => 'Unliked']);
+            // return response()->json(['message' => 'Unliked']);
+            return $this->sendResponse('Post unliked');
+
         } else {
             PostLike::create(['user_id' => auth()->id(), 'post_id' => $id]);
-            return response()->json(['message' => 'Liked']);
+            // return response()->json(['message' => 'Liked']);
+                        return $this->sendResponse('Post Liked');
+
         }
     }
 
@@ -80,28 +90,46 @@ class PostController extends Controller
         foreach ($request->user_ids as $userId) {
             PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
         }
-        return response()->json(['message' => 'Users tagged']);
+        // return response()->json(['message' => 'Users tagged']);
+        return $this->sendResponse('Users tagged successfully');
+
     }
     public function likedUsers($id)
     {
-        return PostLike::with('user')->where('post_id', $id)->get();
+        // return PostLike::with('user')->where('post_id', $id)->get();
+        $users = PostLike::with('user')->where('post_id', $id)->get();
+        return $this->sendResponse('Liked users fetched', $users);
     }
 
     public function myPosts()
     {
-        return Post::withCount(['likes', 'comments'])
+        // return Post::withCount(['likes', 'comments'])
+        //     ->with(['tags.user'])
+        //     ->where('user_id', auth()->id())
+        //     ->get();
+        $posts = Post::withCount(['likes', 'comments'])
             ->with(['tags.user'])
             ->where('user_id', auth()->id())
             ->get();
+
+        return $this->sendResponse('My posts fetched', $posts);
     }
 
     public function myPostsByCategory($categoryId)
     {
-        return Post::withCount(['likes', 'comments'])
+        // return Post::withCount(['likes', 'comments'])
+        //     ->with(['tags.user'])
+        //     ->where('user_id', auth()->id())
+        //     ->where('event_category_id', $categoryId)
+        //     ->get();
+
+           $posts = Post::withCount(['likes', 'comments'])
             ->with(['tags.user'])
             ->where('user_id', auth()->id())
             ->where('event_category_id', $categoryId)
             ->get();
+
+        return $this->sendResponse('My posts by category fetched', $posts);
     }
 
     public function followingPosts(Request $request)
@@ -125,7 +153,9 @@ class PostController extends Controller
         return $this->formatPostWithCounts($post);
     });
 
-    return response()->json($posts);
+    // return response()->json($posts);
+            return $this->sendResponse('Following posts fetched', $posts);
+
 }
 
 public function allPosts(Request $request)
@@ -143,7 +173,9 @@ public function allPosts(Request $request)
         return $this->formatPostWithCounts($post);
     });
 
-    return response()->json($posts);
+    // return response()->json($posts);
+            return $this->sendResponse('All public posts fetched', $posts);
+
 }
 
 public function postDetails($id)
@@ -151,7 +183,9 @@ public function postDetails($id)
     $post = Post::with(['user', 'tags.user', 'likes.user', 'comments.user', 'comments.replies.user', 'comments.likes.user'])
         ->findOrFail($id);
 
-    return response()->json($this->formatPostWithCounts($post));
+    // return response()->json($this->formatPostWithCounts($post));
+            return $this->sendResponse('Post details fetched', $this->formatPostWithCounts($post));
+
 }
 
 private function formatPostWithCounts($post)

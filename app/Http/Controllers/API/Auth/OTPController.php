@@ -23,7 +23,9 @@ class OTPController extends Controller
             ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
         );
 
-        return response()->json(['message' => 'OTP sent (dev)', 'otp' => $otp]);
+        // return response()->json(['message' => 'OTP sent (dev)', 'otp' => $otp]);
+        return $this->sendResponse('OTP sent (dev)', ['otp' => $otp]);
+
     }
 
     public function resetPassword(Request $request)
@@ -44,6 +46,8 @@ class OTPController extends Controller
         $user->update(['password' => Hash::make($request->password)]);
         $otpRecord->delete();
 
-        return response()->json(['message' => 'Password reset successful']);
+        // return response()->json(['message' => 'Password reset successful']);
+        return $this->sendResponse('Password reset successful');
+
     }
 }

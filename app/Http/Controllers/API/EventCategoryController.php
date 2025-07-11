@@ -13,25 +13,36 @@ use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
-class EventCategoryController extends Controller {
-    public function index() {
-        return EventCategory::all();
+class EventCategoryController extends Controller
+{
+    public function index()
+    {
+        $categories = EventCategory::all();
+        return $this->sendResponse('Event categories fetched successfully', $categories);
     }
 
-    public function store(Request $request) {
+    public function store(Request $request)
+    {
         $request->validate(['name' => 'required|string']);
-        return EventCategory::create(['name' => $request->name]);
+        $category = EventCategory::create(['name' => $request->name]);
+
+        return $this->sendResponse('Event category created successfully', $category, 201);
     }
 
-    public function update(Request $request, $id) {
+    public function update(Request $request, $id)
+    {
         $request->validate(['name' => 'required|string']);
-        $cat = EventCategory::findOrFail($id);
-        $cat->update(['name' => $request->name]);
-        return $cat;
+        $category = EventCategory::findOrFail($id);
+        $category->update(['name' => $request->name]);
+
+        return $this->sendResponse('Event category updated successfully', $category);
     }
 
-    public function destroy($id) {
-        EventCategory::findOrFail($id)->delete();
-        return response()->json(['message' => 'Deleted']);
+    public function destroy($id)
+    {
+        $category = EventCategory::findOrFail($id);
+        $category->delete();
+
+        return $this->sendResponse('Event category deleted successfully');
     }
 }
