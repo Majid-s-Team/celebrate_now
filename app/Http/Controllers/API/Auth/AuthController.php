@@ -16,52 +16,124 @@ class AuthController extends Controller
     use ImageUploadTrait;
 
 
+    //old register function
+    // public function register(Request $request)
+    // {
+    //     $request->validate([
+    //         'first_name' => 'required|string',
+    //         'last_name' => 'required|string',
+    //         'email' => 'required|email|unique:users',
+    //         'contact_no' => 'nullable|string|unique:users',
+    //         'profile_type' => ['required', Rule::in(['private', 'public'])],
+    //         'dob' => 'nullable|date',
+    //         'password' => 'required|confirmed|min:6',
+    //         'profile_image' => 'nullable|url',
+    //     ]);
+
+    //     $exists = User::withTrashed()
+    //         ->where(function ($q) use ($request) {
+    //             $q->where('email', $request->email);
+    //             if ($request->contact_no) {
+    //                 $q->orWhere('contact_no', $request->contact_no);
+    //             }
+    //         })->first();
+
+    //     if ($exists) {
+    //         return response()->json(['message' => 'Account already exists or was deactivated. Contact support.'], 403);
+    //     }
+
+    //     $user = User::create([
+    //         'first_name' => $request->first_name,
+    //         'last_name' => $request->last_name,
+    //         'email' => $request->email,
+    //         'contact_no' => $request->contact_no,
+    //         'profile_type' => $request->profile_type,
+    //         'dob' => $request->dob,
+    //         'password' => Hash::make($request->password),
+    //         'role' => 'user',
+    //         'profile_image' => $request->profile_image,
+    //         'is_active' => true,
+    //     ]);
+    //     // return response()->json([
+    //     //     'token' => $user->createToken('API Token')->plainTextToken,
+    //     //     'user' => $user
+    //     // ], 201);
+    //     return $this->sendResponse('User registered successfully', [
+    //         'token' => $user->createToken('API Token')->plainTextToken,
+    //         'user' => $user
+    //     ], 201);
+    // }
+
+
+    /**
+     * Register a new user.
+     * 
+     * This function handles user registration, including validation and account creation.
+     * It checks for existing accounts and returns appropriate responses.(business logic)
+     * response according to the generic return logic in the main file of the controller
+     */
+
     public function register(Request $request)
-    {
-        $request->validate([
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
-            'email' => 'required|email|unique:users',
-            'contact_no' => 'nullable|string|unique:users',
-            'profile_type' => ['required', Rule::in(['private', 'public'])],
-            'dob' => 'nullable|date',
-            'password' => 'required|confirmed|min:6',
-            'profile_image' => 'nullable|url',
-        ]);
+{
+    // Manual validation so we can catch errors and use sendError
+    $validator = \Validator::make($request->all(), [
+        'first_name' => 'required|string',
+        'last_name' => 'required|string',
+        'email' => 'required|email|unique:users',
+        'contact_no' => 'nullable|string|unique:users',
+        'profile_type' => ['required', \Illuminate\Validation\Rule::in(['private', 'public'])],
+        'dob' => 'nullable|date',
+        'password' => 'required|confirmed|min:6',
+        'profile_image' => 'nullable|url',
+    ]);
 
-        $exists = User::withTrashed()
-            ->where(function ($q) use ($request) {
-                $q->where('email', $request->email);
-                if ($request->contact_no) {
-                    $q->orWhere('contact_no', $request->contact_no);
-                }
-            })->first();
-
-        if ($exists) {
-            return response()->json(['message' => 'Account already exists or was deactivated. Contact support.'], 403);
-        }
-
-        $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'contact_no' => $request->contact_no,
-            'profile_type' => $request->profile_type,
-            'dob' => $request->dob,
-            'password' => Hash::make($request->password),
-            'role' => 'user',
-            'profile_image' => $request->profile_image,
-            'is_active' => true,
-        ]);
-        // return response()->json([
-        //     'token' => $user->createToken('API Token')->plainTextToken,
-        //     'user' => $user
-        // ], 201);
-        return $this->sendResponse('User registered successfully', [
-            'token' => $user->createToken('API Token')->plainTextToken,
-            'user' => $user
-        ], 201);
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
     }
+
+    /* Check if the user already exists or was deactivated */
+
+    $exists = User::withTrashed()
+        ->where(function ($q) use ($request) {
+            $q->where('email', $request->email);
+            if ($request->contact_no) {
+                $q->orWhere('contact_no', $request->contact_no);
+            }
+        })->first();
+
+    if ($exists) {
+        return $this->sendError('Account already exists or was deactivated. Contact support.', [], 403);
+    }
+
+    $user = User::create([
+        'first_name' => $request->first_name,
+        'last_name' => $request->last_name,
+        'email' => $request->email,
+        'contact_no' => $request->contact_no,
+        'profile_type' => $request->profile_type,
+        'dob' => $request->dob,
+        'password' => \Hash::make($request->password),
+        'role' => 'user',
+        'profile_image' => $request->profile_image,
+        'is_active' => true,
+    ]);
+
+    // return response()->json([
+    //     'token' => $user->createToken('API Token')->plainTextToken,
+    //     'user' => $user
+    // ], 201);
+    // Use the generic response method from the base controller
+    // to maintain consistency across the application
+    // This will return a JSON response with the message, data, and status code
+    return $this->sendResponse('User registered successfully', [
+        'token' => $user->createToken('API Token')->plainTextToken,
+        'user' => $user
+    ], 201);
+}
+
+
+
+        
 
     public function login(Request $request)
     {
@@ -73,7 +145,11 @@ class AuthController extends Controller
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+            // return response()->json(['message' => 'Invalid credentials'], 401);
+
+        // return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        return $this-> sendError('Invalid credentials', [], 401);
+
         }
 
         if (!$user->is_active) {

@@ -56,10 +56,19 @@ class PostController extends Controller
 
     }
 
+    /**
+     * Display the specified resource.
+     * fucntion work : 
+     * busniess lo
+
+     */
     public function show($id)
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
-        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
+        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->find($id);
+        if (!$post) {
+            return $this->sendError('Post not found', [], 404);
+        }
         return $this->sendResponse('Post fetched successfully', $post);
     }
 
