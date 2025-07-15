@@ -10,70 +10,16 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Traits\ImageUploadTrait;
+use Illuminate\Support\Facades\Validator;
+
+
 
 class AuthController extends Controller
+
 {
     use ImageUploadTrait;
 
-
-    //old register function
-    // public function register(Request $request)
-    // {
-    //     $request->validate([
-    //         'first_name' => 'required|string',
-    //         'last_name' => 'required|string',
-    //         'email' => 'required|email|unique:users',
-    //         'contact_no' => 'nullable|string|unique:users',
-    //         'profile_type' => ['required', Rule::in(['private', 'public'])],
-    //         'dob' => 'nullable|date',
-    //         'password' => 'required|confirmed|min:6',
-    //         'profile_image' => 'nullable|url',
-    //     ]);
-
-    //     $exists = User::withTrashed()
-    //         ->where(function ($q) use ($request) {
-    //             $q->where('email', $request->email);
-    //             if ($request->contact_no) {
-    //                 $q->orWhere('contact_no', $request->contact_no);
-    //             }
-    //         })->first();
-
-    //     if ($exists) {
-    //         return response()->json(['message' => 'Account already exists or was deactivated. Contact support.'], 403);
-    //     }
-
-    //     $user = User::create([
-    //         'first_name' => $request->first_name,
-    //         'last_name' => $request->last_name,
-    //         'email' => $request->email,
-    //         'contact_no' => $request->contact_no,
-    //         'profile_type' => $request->profile_type,
-    //         'dob' => $request->dob,
-    //         'password' => Hash::make($request->password),
-    //         'role' => 'user',
-    //         'profile_image' => $request->profile_image,
-    //         'is_active' => true,
-    //     ]);
-    //     // return response()->json([
-    //     //     'token' => $user->createToken('API Token')->plainTextToken,
-    //     //     'user' => $user
-    //     // ], 201);
-    //     return $this->sendResponse('User registered successfully', [
-    //         'token' => $user->createToken('API Token')->plainTextToken,
-    //         'user' => $user
-    //     ], 201);
-    // }
-
-
-    /**
-     * Register a new user.
-     * 
-     * This function handles user registration, including validation and account creation.
-     * It checks for existing accounts and returns appropriate responses.(business logic)
-     * response according to the generic return logic in the main file of the controller
-     */
-
-    public function register(Request $request)
+      public function register(Request $request)
 {
     // Manual validation so we can catch errors and use sendError
     $validator = \Validator::make($request->all(), [
@@ -131,11 +77,7 @@ class AuthController extends Controller
     ], 201);
 }
 
-
-
-        
-
-    public function login(Request $request)
+public function login(Request $request)
     {
         $request->validate([
             'email' => 'required|email',
@@ -160,51 +102,57 @@ class AuthController extends Controller
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ]);
+
+        
     }
 
-    public function updateProfile(Request $request)
-    {
-        $user = auth()->user();
-        // dd($request);
+       public function updateProfile(Request $request)
+{
+    $user = auth()->user();
 
-        $request->validate([
-            'first_name' => 'nullable|string',
-            'last_name' => 'nullable|string',
-            'contact_no' => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
-            'profile_type' => ['nullable', Rule::in(['private', 'public'])],
-            'dob' => 'nullable|date',
-            'profile_image' => 'nullable|url',
-        ]);
-        $user->update($request->only('first_name', 'last_name', 'contact_no', 'profile_type', 'dob', 'profile_image'));
-
-        // return response()->json(['message' => 'Profile updated', 'user' => $user]);
-        return $this->sendResponse('Profile updated', $user);
-
+    if (!$user) {
+        return $this->sendError('User not authenticated', [], 401);
     }
 
-    public function uploadImage(Request $request)
-    {
-        $request->validate([
-            'key' => 'required|string|in:profile,cover,post,gallery,logo',
-            'image' => 'required|image|max:2048',
-        ]);
+    // Manual validation
+    $validator = Validator::make($request->all(), [
+        'first_name'    => 'required|string',
+        'last_name'     => 'required|string',
+        'contact_no'    => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
+        'profile_type'  => ['required', Rule::in(['private', 'public'])],
+        'dob'           => 'nullable|date',
+        'profile_image' => 'nullable|url',
+    ]);
 
+    if ($validator->fails()) {
+        return $this->sendError('Validation failed', $validator->errors(), 422);
+    }
+
+    $user->update($validator->validated());
+
+    return $this->sendResponse('Profile updated', $user);
+}
+
+ public function uploadImage(Request $request)
+
+    {
+        $validator = Validator::make($request->all(), [
+          'key'   => 'required|string|in:profile,cover,post,gallery,logo',
+           'image' => 'required|image|max:2048',
+       ]);
+          if ($validator->fails()) {
+        return $this->sendError('Validation failed', $validator->errors(), 422);
+       }
         $url = $this->uploadImageByKey($request->file('image'), $request->key);
-
-        // return response()->json([
-        //     'url' => $url,
-        //     'message' => 'Image uploaded successfully'
-        // ], 201);
         return $this->sendResponse('Image uploaded successfully', ['url' => $url], 201);
 
+
+        
     }
 
-
-
-    public function logout(Request $request)
+ public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-        // return response()->json(['message' => 'Logged out successfully']);
         return $this->sendResponse('Logged out successfully');
 
     }
@@ -216,25 +164,31 @@ class AuthController extends Controller
 
     }
 
+      public function changePassword(Request $request)
 
-
-    public function changePassword(Request $request)
     {
-        $request->validate([
-            'old_password' => 'required',
-            'new_password' => 'required|confirmed|min:6',
-        ]);
+        
 
-        if (!Hash::check($request->old_password, auth()->user()->password)) {
-            return response()->json(['message' => 'Incorrect old password'], 400);
+
+        $validator = Validator::make($request->all(), [
+        'old_password'              => 'required',
+        'new_password'              => 'required|min:6',
+        'new_password_confirmation' => 'required|same:new_password',
+     ]); 
+
+     if ($validator->fails()) {
+            return $this->sendError('Validation failed', $validator->errors(), 422);
         }
 
-        auth()->user()->update([
+      if (!Hash::check($request->old_password, auth()->user()->password)) {
+            return $this->sendError('Old password is incorrect', 'Invalid password', 401);
+        }
+
+          auth()->user()->update([
             'password' => Hash::make($request->new_password)
         ]);
 
-        // return response()->json(['message' => 'Password updated successfully']);
-        return $this->sendResponse('Password updated successfully');
+        return $this->sendResponse('Password updated successfully',$request->all(), 200);
 
     }
 
@@ -249,4 +203,44 @@ class AuthController extends Controller
         return $this->sendResponse('Account deactivated');
 
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
+
+  
+
+   
+    
+  
+
+    
+
+  
+
+    
 }
+
+
+
+
+
