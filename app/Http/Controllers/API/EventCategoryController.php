@@ -13,6 +13,7 @@ use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 class EventCategoryController extends Controller
 {
     public function index()
@@ -23,7 +24,12 @@ class EventCategoryController extends Controller
 
     public function store(Request $request)
     {
-        $request->validate(['name' => 'required|string']);
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+        ]);
+        if($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
         $category = EventCategory::create(['name' => $request->name]);
 
         return $this->sendResponse('Event category created successfully', $category, 201);
@@ -31,8 +37,16 @@ class EventCategoryController extends Controller
 
     public function update(Request $request, $id)
     {
-        $request->validate(['name' => 'required|string']);
-        $category = EventCategory::findOrFail($id);
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+        ]);
+        if($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+        $category = EventCategory::find($id);
+        if (!$category) {
+            return $this->sendError('Event category not found',  'No Event found for the id : ' . $id, 404);
+        }
         $category->update(['name' => $request->name]);
 
         return $this->sendResponse('Event category updated successfully', $category);
@@ -40,7 +54,10 @@ class EventCategoryController extends Controller
 
     public function destroy($id)
     {
-        $category = EventCategory::findOrFail($id);
+        $category = EventCategory::find($id);
+        if (!$category) {
+            return $this->sendError('Event category not found', 'No Event found for the id : ' . $id, 404);
+        }
         $category->delete();
 
         return $this->sendResponse('Event category deleted successfully');

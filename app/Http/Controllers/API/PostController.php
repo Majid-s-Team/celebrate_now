@@ -13,6 +13,7 @@ use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
 
 class PostController extends Controller
 {
@@ -28,7 +29,8 @@ class PostController extends Controller
 
         // dd(auth()->id(), auth()->user());
 
-        $request->validate([
+        //manual validation due to sendError custom method for error responses
+        $validator = Validator::make($request->all(), [
             'caption' => 'nullable|string',
             'photo' => 'nullable|string',
             'event_category_id' => 'nullable|exists:event_categories,id',
@@ -36,6 +38,19 @@ class PostController extends Controller
             'tag_user_ids' => 'nullable|array',
             'tag_user_ids.*' => 'exists:users,id'
         ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+
+        // $request->validate([
+        //     'caption' => 'nullable|string',
+        //     'photo' => 'nullable|string',
+        //     'event_category_id' => 'nullable|exists:event_categories,id',
+        //     'privacy' => 'required|in:public,private',
+        //     'tag_user_ids' => 'nullable|array',
+        //     'tag_user_ids.*' => 'exists:users,id'
+        // ]);
 
         $post = Post::create([
             'user_id' => auth()->id(),
@@ -93,16 +108,31 @@ class PostController extends Controller
         }
     }
 
+
+    //new taguser function in order to use sendError custom method for error responses and also returns error if post not found
     public function tagUsers(Request $request, $id)
     {
-        $request->validate(['user_ids' => 'required|array']);
+        $post = Post::find($id);
+        if (!$post) {
+            return $this->sendError('No Record Found', 'Post id : ' . $id . ' not found', 404);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id'
+        ]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+
         foreach ($request->user_ids as $userId) {
             PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
         }
-        // return response()->json(['message' => 'Users tagged']);
-        return $this->sendResponse('Users tagged successfully');
 
+        return $this->sendResponse('Users tagged successfully');
     }
+
+
     public function likedUsers($id)
     {
         // return PostLike::with('user')->where('post_id', $id)->get();

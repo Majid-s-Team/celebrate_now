@@ -17,9 +17,9 @@ class OTPController extends Controller
 
         try {
             $user = User::where('email', $request->email)->first();
-
+            //change to sendError due t o custom method in Controller for returning error responses
             if (!$user) {
-                return $this->sendResponse('User not found', null, 404);
+                return $this->sendError('User not found', null, 404);
             }
 
             $otp = rand(100000, 999999);
@@ -49,7 +49,8 @@ class OTPController extends Controller
         $otpRecord = UserOtp::where('user_id', $user->id)->where('otp', $request->otp)->first();
 
         if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
-            return response()->json(['message' => 'Invalid or expired OTP'], 400);
+            return $this->sendError('Invalid or expired OTP', [], 400);
+            // return response()->json(['message' => 'Invalid or expired OTP'], 400);
         }
 
         $user->update(['password' => Hash::make($request->password)]);
