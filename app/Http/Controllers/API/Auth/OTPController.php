@@ -15,18 +15,27 @@ class OTPController extends Controller
     {
         $request->validate(['email' => 'required|email']);
 
-        $user = User::where('email', $request->email)->firstOrFail();
-        $otp = rand(100000, 999999);
+        try {
+            $user = User::where('email', $request->email)->first();
 
-        UserOtp::updateOrCreate(
-            ['user_id' => $user->id],
-            ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
-        );
+            if (!$user) {
+                return $this->sendResponse('User not found', null, 404);
+            }
 
-        // return response()->json(['message' => 'OTP sent (dev)', 'otp' => $otp]);
-        return $this->sendResponse('OTP sent (dev)', ['otp' => $otp]);
+            $otp = rand(100000, 999999);
 
+            UserOtp::updateOrCreate(
+                ['user_id' => $user->id],
+                ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
+            );
+
+            return $this->sendResponse('OTP sent (dev)', ['otp' => $otp], 200);
+
+        } catch (\Exception $e) {
+            return $this->sendResponse('Server Error', ['error' => $e->getMessage()], 500);
+        }
     }
+
 
     public function resetPassword(Request $request)
     {
