@@ -94,7 +94,15 @@ class PostController extends Controller
 
     public function like($id)
     {
+        
+        // Yeh line check karti hai ke current user ne is post ko like kiya hai ya nahi
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
+
+        // Agar post nahi milta to error return karte hain
+        $post = Post::find($id);
+        if (!$post) {
+            return $this->sendError('Post not found', [], 404);
+        }
         if ($like) {
             $like->delete();
             // return response()->json(['message' => 'Unliked']);
@@ -116,11 +124,12 @@ class PostController extends Controller
         if (!$post) {
             return $this->sendError('No Record Found', 'Post id : ' . $id . ' not found', 404);
         }
-
+        //manual validation due to sendError custom method for error responses
         $validator = Validator::make($request->all(), [
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id'
         ]);
+
         if ($validator->fails()) {
             return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
@@ -208,8 +217,13 @@ public function allPosts(Request $request)
         $query->where('event_category_id', $categoryId);
     }
 
+
+    
+
     $posts = $query->latest()->get()->map(function ($post) {
-        return $this->formatPostWithCounts($post);
+        //changed the function from formatPostWithCounts to formatPostCount
+        // to include the post count as well
+        return $this->formatPostCount($post);
     });
 
     // return response()->json($posts);
@@ -258,5 +272,41 @@ private function formatPostWithCounts($post)
         })
     ];
 }
+
+// new function to acutally count the posts as well
+
+private function formatPostCount($post)
+{
+    return [
+        'id' => $post->id,
+        'user' => $post->user,
+        'caption' => $post->caption,
+        'photo' => $post->photo,
+        'privacy' => $post->privacy,
+        'event_category' => $post->category?->name,
+        'tagged_users' => $post->tags->pluck('user'),
+        'post_count' => $post->count(),
+        'likes_count' => $post->likes->count(),
+        'comments_count' => $post->comments->count(),
+        'comments' => $post->comments->map(function ($comment) {
+            return [
+                'id' => $comment->id,
+                'body' => $comment->body,
+                'user' => $comment->user,
+                'likes_count' => $comment->likes->count(),
+                'replies_count' => $comment->replies->count(),
+                'replies' => $comment->replies->map(function ($reply) {
+                    return [
+                        'id' => $reply->id,
+                        'body' => $reply->body,
+                        'user' => $reply->user,
+                        'emojis' => $reply->emojis
+                    ];
+                }),
+            ];
+        })
+    ];
+}
+
 
 }
