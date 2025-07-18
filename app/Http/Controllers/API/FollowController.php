@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Post;
 use App\Models\PostLike;
 use App\Models\PostTag;
+use App\Models\User;
 use App\Models\Comment;
 use App\Models\CommentLike;
 use App\Models\Reply;
@@ -29,6 +30,12 @@ class FollowController extends Controller
 
     public function toggleFollow($id)
     {
+        // Check if the user exists
+        // If not, return an error response
+
+        if (! User::find($id)) {
+            return $this->sendError('User not found', [], 404);
+        }
         if (auth()->id() == $id) {
             return $this->sendResponse('Cannot follow yourself', null, 400);
         }
@@ -68,7 +75,7 @@ class FollowController extends Controller
 
         return $this->sendResponse('Following fetched successfully', $following);
     }
-
+    // returns all the followings and followers of the authenticated user
     public function myNetwork()
     {
         $followers = auth()->user()

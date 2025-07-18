@@ -30,7 +30,7 @@ Route::prefix('auth')->group(function () {
     Route::put('/update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
     Route::get('/profile', [AuthController::class, 'profile'])->middleware('auth:sanctum');
     Route::delete('/deactivate', [AuthController::class, 'deactivate'])->middleware('auth:sanctum');
-    Route::post('/upload-image', [AuthController::class, 'uploadImage'])->middleware('auth:sanctum');
+    Route::post('/upload-image', [AuthController::class, 'uploadImage']);
 
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
@@ -55,7 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/posts', [PostController::class, 'myPosts']);
     Route::get('/posts/{id}', [PostController::class, 'show']);
     // Route::post('/posts/{id}/like', [PostController::class, 'like']);
-    Route::post('/posts/{id}/like', [PostController::class, 'toggleLike']);
+    Route::post('/posts/{id}/like', [PostController::class, 'like']);
     Route::get('/posts/{id}/liked-users', [PostController::class, 'likedUsers']);
 
    // Show Posts of Users I Follow (Public + Their Private)
@@ -69,10 +69,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     Route::post('/posts/{id}/tag', [PostController::class, 'tagUsers']);
+    Route::get('/posts/{id}/with-counts', [PostController::class, 'publicPostsWithFollowersFollowing']);
 
     // Comment Routes
     Route::post('/posts/{id}/comment', [CommentController::class, 'store']);
     Route::post('/comments/{id}/like', [CommentController::class, 'like']);
+
 
 
     Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);

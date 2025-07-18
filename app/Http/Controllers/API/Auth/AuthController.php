@@ -10,24 +10,29 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Traits\ImageUploadTrait;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
     use ImageUploadTrait;
 
-
     public function register(Request $request)
     {
-        $request->validate([
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
-            'email' => 'required|email|unique:users',
-            'contact_no' => 'nullable|string|unique:users',
-            'profile_type' => ['required', Rule::in(['private', 'public'])],
-            'dob' => 'nullable|date',
-            'password' => 'required|confirmed|min:6',
-            'profile_image' => 'nullable|url',
+        //manual validation due to sendError custom method for error responses
+        $validator = Validator::make($request->all(), [
+            'first_name'     => 'required|string',
+            'last_name'      => 'required|string',
+            'email'          => 'required|email|unique:users',
+            'contact_no'     => 'nullable|string|unique:users',
+            'profile_type'   => ['required', Rule::in(['private', 'public'])],
+            'dob'            => 'nullable|date',
+            'password'       => 'required|confirmed|min:6',
+            'profile_image'  => 'nullable|url',
         ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
 
         $exists = User::withTrashed()
             ->where(function ($q) use ($request) {
@@ -38,42 +43,39 @@ class AuthController extends Controller
             })->first();
 
         if ($exists) {
-            return response()->json(['message' => 'Account already exists or was deactivated. Contact support.'], 403);
+            return $this->sendError('Account already exists or was deactivated. Contact support.', [], 403);
         }
 
         $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'contact_no' => $request->contact_no,
-            'profile_type' => $request->profile_type,
-            'dob' => $request->dob,
-            'password' => Hash::make($request->password),
-            'role' => 'user',
+            'first_name'    => $request->first_name,
+            'last_name'     => $request->last_name,
+            'email'         => $request->email,
+            'contact_no'    => $request->contact_no,
+            'profile_type'  => $request->profile_type,
+            'dob'           => $request->dob,
+            'password'      => Hash::make($request->password),
+            'role'          => 'user',
             'profile_image' => $request->profile_image,
-            'is_active' => true,
+            'is_active'     => true,
         ]);
-        // return response()->json([
-        //     'token' => $user->createToken('API Token')->plainTextToken,
-        //     'user' => $user
-        // ], 201);
+
         return $this->sendResponse('User registered successfully', [
             'token' => $user->createToken('API Token')->plainTextToken,
-            'user' => $user
+            'user'  => $user
         ], 201);
     }
 
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'email'    => 'required|email',
             'password' => 'required'
         ]);
 
         $user = User::where('email', $request->email)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+            return $this->sendError('Invalid credentials', [], 401);
         }
 
         if (!$user->is_active) {
@@ -82,84 +84,90 @@ class AuthController extends Controller
 
         return $this->sendResponse('Login successful', [
             'token' => $user->createToken('API Token')->plainTextToken,
-            'user' => $user
+            'user'  => $user
         ]);
     }
 
     public function updateProfile(Request $request)
     {
         $user = auth()->user();
-        // dd($request);
 
-        $request->validate([
-            'first_name' => 'nullable|string',
-            'last_name' => 'nullable|string',
-            'contact_no' => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
-            'profile_type' => ['nullable', Rule::in(['private', 'public'])],
-            'dob' => 'nullable|date',
+        if (!$user) {
+            return $this->sendError('User not authenticated', [], 401);
+        }
+
+        //changed first_name and last_name to required strings
+        //added contact_no validation to allow null but unique if provided
+        //added profile_type validation to ensure it is either 'private' or 'public'
+
+        $validator = Validator::make($request->all(), [
+            'first_name'    => 'required|string',
+            'last_name'     => 'required|string',
+            'contact_no'    => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
+            'profile_type'  => ['required', Rule::in(['private', 'public'])],
+            'dob'           => 'nullable|date',
             'profile_image' => 'nullable|url',
         ]);
-        $user->update($request->only('first_name', 'last_name', 'contact_no', 'profile_type', 'dob', 'profile_image'));
 
-        // return response()->json(['message' => 'Profile updated', 'user' => $user]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation failed', $validator->errors(), 422);
+        }
+
+        $user->update($validator->validated());
+
         return $this->sendResponse('Profile updated', $user);
-
     }
 
     public function uploadImage(Request $request)
     {
-        $request->validate([
-            'key' => 'required|string|in:profile,cover,post,gallery,logo',
+
+        //keys are the different types of images that can be uploaded i.e. profile, cover, post, gallery, logo
+        $validator = Validator::make($request->all(), [
+            'key'   => 'required|string|in:profile,cover,post,gallery,logo',
             'image' => 'required|image|max:2048',
         ]);
 
+        if ($validator->fails()) {
+            return $this->sendError('Validation failed', $validator->errors(), 422);
+        }
+
         $url = $this->uploadImageByKey($request->file('image'), $request->key);
 
-        // return response()->json([
-        //     'url' => $url,
-        //     'message' => 'Image uploaded successfully'
-        // ], 201);
         return $this->sendResponse('Image uploaded successfully', ['url' => $url], 201);
-
     }
-
-
 
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
-        // return response()->json(['message' => 'Logged out successfully']);
         return $this->sendResponse('Logged out successfully');
-
     }
 
     public function profile()
     {
-        // return response()->json(auth()->user());
         return $this->sendResponse('Profile fetched', auth()->user());
-
     }
-
-
 
     public function changePassword(Request $request)
     {
-        $request->validate([
-            'old_password' => 'required',
-            'new_password' => 'required|confirmed|min:6',
+        $validator = Validator::make($request->all(), [
+            'old_password'              => 'required',
+            'new_password'              => 'required|min:6',
+            'new_password_confirmation' => 'required|same:new_password',
         ]);
 
+        if ($validator->fails()) {
+            return $this->sendError('Validation failed', $validator->errors(), 422);
+        }
+
         if (!Hash::check($request->old_password, auth()->user()->password)) {
-            return response()->json(['message' => 'Incorrect old password'], 400);
+            return $this->sendError('Old password is incorrect', 'Invalid password', 401);
         }
 
         auth()->user()->update([
             'password' => Hash::make($request->new_password)
         ]);
 
-        // return response()->json(['message' => 'Password updated successfully']);
-        return $this->sendResponse('Password updated successfully');
-
+        return $this->sendResponse('Password updated successfully', [], 200);
     }
 
     public function deactivate()
@@ -169,8 +177,6 @@ class AuthController extends Controller
         $user->tokens()->delete();
         $user->save();
 
-        // return response()->json(['message' => 'Account deactivated']);
         return $this->sendResponse('Account deactivated');
-
     }
 }

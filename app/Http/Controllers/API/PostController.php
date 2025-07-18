@@ -13,6 +13,8 @@ use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Validator;
+use App\Models\User;
 
 class PostController extends Controller
 {
@@ -24,11 +26,13 @@ class PostController extends Controller
     }
 
     public function store(Request $request)
+
     {
 
         // dd(auth()->id(), auth()->user());
 
-        $request->validate([
+        //manual validation due to sendError custom method for error responses
+        $validator = Validator::make($request->all(), [
             'caption' => 'nullable|string',
             'photo' => 'nullable|string',
             'event_category_id' => 'nullable|exists:event_categories,id',
@@ -36,6 +40,19 @@ class PostController extends Controller
             'tag_user_ids' => 'nullable|array',
             'tag_user_ids.*' => 'exists:users,id'
         ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+
+        // $request->validate([
+        //     'caption' => 'nullable|string',
+        //     'photo' => 'nullable|string',
+        //     'event_category_id' => 'nullable|exists:event_categories,id',
+        //     'privacy' => 'required|in:public,private',
+        //     'tag_user_ids' => 'nullable|array',
+        //     'tag_user_ids.*' => 'exists:users,id'
+        // ]);
 
         $post = Post::create([
             'user_id' => auth()->id(),
@@ -54,12 +71,22 @@ class PostController extends Controller
         // return response()->json($post);
         return $this->sendResponse('Post created successfully', $post, 201);
 
+
     }
 
+    /**
+     * Display the specified resource.
+     * fucntion work :
+     * busniess lo
+
+     */
     public function show($id)
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
-        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
+        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->find($id);
+        if (!$post) {
+            return $this->sendError('Post not found', [], 404);
+        }
         return $this->sendResponse('Post fetched successfully', $post);
     }
 
@@ -70,7 +97,15 @@ class PostController extends Controller
 
     public function like($id)
     {
+
+        // Yeh line check karti hai ke current user ne is post ko like kiya hai ya nahi
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
+
+        // Agar post nahi milta to error return karte hain
+        $post = Post::find($id);
+        if (!$post) {
+            return $this->sendError('Post not found', [], 404);
+        }
         if ($like) {
             $like->delete();
             // return response()->json(['message' => 'Unliked']);
@@ -84,16 +119,32 @@ class PostController extends Controller
         }
     }
 
+
+    //new taguser function in order to use sendError custom method for error responses and also returns error if post not found
     public function tagUsers(Request $request, $id)
     {
-        $request->validate(['user_ids' => 'required|array']);
+        $post = Post::find($id);
+        if (!$post) {
+            return $this->sendError('No Record Found', 'Post id : ' . $id . ' not found', 404);
+        }
+        //manual validation due to sendError custom method for error responses
+        $validator = Validator::make($request->all(), [
+            'user_ids' => 'required|array',
+            'user_ids.*' => 'exists:users,id'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+
         foreach ($request->user_ids as $userId) {
             PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
         }
-        // return response()->json(['message' => 'Users tagged']);
-        return $this->sendResponse('Users tagged successfully');
 
+        return $this->sendResponse('Users tagged successfully');
     }
+
+
     public function likedUsers($id)
     {
         // return PostLike::with('user')->where('post_id', $id)->get();
@@ -138,6 +189,8 @@ class PostController extends Controller
 
     $followingIds = auth()->user()->following()->pluck('following_id');
 
+    // dd($followingIds);
+
     $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
         ->whereIn('user_id', $followingIds)
         ->where(function ($q) {
@@ -169,8 +222,13 @@ public function allPosts(Request $request)
         $query->where('event_category_id', $categoryId);
     }
 
+
+
+
     $posts = $query->latest()->get()->map(function ($post) {
-        return $this->formatPostWithCounts($post);
+        //changed the function from formatPostWithCounts to formatPostCount
+        // to include the post count as well
+        return $this->formatPostCount($post);
     });
 
     // return response()->json($posts);
@@ -220,4 +278,73 @@ private function formatPostWithCounts($post)
     ];
 }
 
+// new function to acutally count the posts as well
+
+private function formatPostCount($post)
+{
+    return [
+        'id' => $post->id,
+        'user' => $post->user,
+        'caption' => $post->caption,
+        'photo' => $post->photo,
+        'privacy' => $post->privacy,
+        'event_category' => $post->category?->name,
+        'tagged_users' => $post->tags->pluck('user'),
+        'post_count' => $post->count(),
+        'likes_count' => $post->likes->count(),
+        'comments_count' => $post->comments->count(),
+        'comments' => $post->comments->map(function ($comment) {
+            return [
+                'id' => $comment->id,
+                'body' => $comment->body,
+                'user' => $comment->user,
+                'likes_count' => $comment->likes->count(),
+                'replies_count' => $comment->replies->count(),
+                'replies' => $comment->replies->map(function ($reply) {
+                    return [
+                        'id' => $reply->id,
+                        'body' => $reply->body,
+                        'user' => $reply->user,
+                        'emojis' => $reply->emojis
+                    ];
+                }),
+            ];
+        })
+    ];
+}
+
+
+// returns public posts of a user with followers and following
+// this function is used in the api route /posts/{id}/with-counts
+public function publicPostsWithFollowersFollowing($id)
+{
+    try {
+        $user = User::find($id);
+             // Check if user exists
+         // If not, return an error response
+
+        if (!$user) {
+            return $this->sendError('User not found', [], 404);
+        }
+        // Get public posts of the user
+        $publicPosts = Post::with(['tags.user', 'likes.user', 'comments.user'])
+            ->where('user_id', $user->id)
+            ->where('privacy', 'public')
+            ->get();
+
+        $postCount = $publicPosts->count();
+
+        $followers = $user->followers()->with('follower')->get()->pluck('follower');
+        $following = $user->following()->with('following')->get()->pluck('following');
+
+        return $this->sendResponse('Public posts with followers and following fetched', [
+            'public_posts' => $publicPosts,
+            'post_count' => $postCount,
+            'followers' => $followers,
+            'following' => $following
+        ]);
+    } catch (\Exception $e) {
+        return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+    }
+}
 }
