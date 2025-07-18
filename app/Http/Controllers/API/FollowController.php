@@ -29,10 +29,10 @@ class FollowController extends Controller
     // }
 
     public function toggleFollow($id)
-    {   
+    {
         // Check if the user exists
         // If not, return an error response
-        
+
         if (! User::find($id)) {
             return $this->sendError('User not found', [], 404);
         }

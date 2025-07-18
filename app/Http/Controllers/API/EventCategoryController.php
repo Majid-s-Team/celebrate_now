@@ -14,6 +14,8 @@ use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+
+
 class EventCategoryController extends Controller
 {
     public function index()

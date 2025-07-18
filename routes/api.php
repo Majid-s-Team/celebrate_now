@@ -69,10 +69,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
 
     Route::post('/posts/{id}/tag', [PostController::class, 'tagUsers']);
+    Route::get('/posts/{id}/with-counts', [PostController::class, 'publicPostsWithFollowersFollowing']);
 
     // Comment Routes
     Route::post('/posts/{id}/comment', [CommentController::class, 'store']);
     Route::post('/comments/{id}/like', [CommentController::class, 'like']);
+
 
 
     Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);

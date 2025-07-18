@@ -14,6 +14,7 @@ use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
+use App\Models\User;
 
 class PostController extends Controller
 {
@@ -25,6 +26,7 @@ class PostController extends Controller
     }
 
     public function store(Request $request)
+
     {
 
         // dd(auth()->id(), auth()->user());
@@ -69,11 +71,12 @@ class PostController extends Controller
         // return response()->json($post);
         return $this->sendResponse('Post created successfully', $post, 201);
 
+
     }
 
     /**
      * Display the specified resource.
-     * fucntion work : 
+     * fucntion work :
      * busniess lo
 
      */
@@ -94,7 +97,7 @@ class PostController extends Controller
 
     public function like($id)
     {
-        
+
         // Yeh line check karti hai ke current user ne is post ko like kiya hai ya nahi
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
 
@@ -186,6 +189,8 @@ class PostController extends Controller
 
     $followingIds = auth()->user()->following()->pluck('following_id');
 
+    // dd($followingIds);
+
     $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
         ->whereIn('user_id', $followingIds)
         ->where(function ($q) {
@@ -218,7 +223,7 @@ public function allPosts(Request $request)
     }
 
 
-    
+
 
     $posts = $query->latest()->get()->map(function ($post) {
         //changed the function from formatPostWithCounts to formatPostCount
@@ -309,4 +314,37 @@ private function formatPostCount($post)
 }
 
 
+// returns public posts of a user with followers and following
+// this function is used in the api route /posts/{id}/with-counts
+public function publicPostsWithFollowersFollowing($id)
+{
+    try {
+        $user = User::find($id);
+             // Check if user exists
+         // If not, return an error response
+
+        if (!$user) {
+            return $this->sendError('User not found', [], 404);
+        }
+        // Get public posts of the user
+        $publicPosts = Post::with(['tags.user', 'likes.user', 'comments.user'])
+            ->where('user_id', $user->id)
+            ->where('privacy', 'public')
+            ->get();
+
+        $postCount = $publicPosts->count();
+
+        $followers = $user->followers()->with('follower')->get()->pluck('follower');
+        $following = $user->following()->with('following')->get()->pluck('following');
+
+        return $this->sendResponse('Public posts with followers and following fetched', [
+            'public_posts' => $publicPosts,
+            'post_count' => $postCount,
+            'followers' => $followers,
+            'following' => $following
+        ]);
+    } catch (\Exception $e) {
+        return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+    }
+}
 }
