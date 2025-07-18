@@ -30,7 +30,7 @@ Route::prefix('auth')->group(function () {
     Route::put('/update-profile', [AuthController::class, 'updateProfile'])->middleware('auth:sanctum');
     Route::get('/profile', [AuthController::class, 'profile'])->middleware('auth:sanctum');
     Route::delete('/deactivate', [AuthController::class, 'deactivate'])->middleware('auth:sanctum');
-    Route::post('/upload-image', [AuthController::class, 'uploadImage'])->middleware('auth:sanctum');
+    Route::post('/upload-image', [AuthController::class, 'uploadImage']);
 
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
