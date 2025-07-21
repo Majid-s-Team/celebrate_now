@@ -117,14 +117,13 @@ class AuthController extends Controller
 
         return $this->sendResponse('Profile updated', $user);
     }
-
     public function uploadImage(Request $request)
     {
 
         //keys are the different types of images that can be uploaded i.e. profile, cover, post, gallery, logo
         $validator = Validator::make($request->all(), [
-            'key'   => 'required|string|in:profile,cover,post,gallery,logo',
-            'image' => 'required|image|max:2048',
+            'key'   => 'required|string|in:profile,cover,post,gallery,logo,video',
+            'image' => 'required|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm|max:10240',
         ]);
 
         if ($validator->fails()) {
