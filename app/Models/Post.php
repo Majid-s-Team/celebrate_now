@@ -15,7 +15,13 @@ class Post extends Model
         'photo',
         'event_category_id',
         'privacy',
+
     ];
+
+    public function media()
+    {
+        return $this->hasMany(PostMedia::class);
+    }
 
     public function user()
     {

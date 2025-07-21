@@ -11,6 +11,7 @@ use App\Models\Comment;
 use App\Models\CommentLike;
 use App\Models\Reply;
 use App\Models\Follow;
+use App\Models\PostMedia;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -21,58 +22,104 @@ class PostController extends Controller
     public function index()
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
-        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
+        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user','media'])->get();
         return $this->sendResponse('Posts fetched successfully', $posts);
     }
 
     public function store(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'caption' => 'nullable|string',
+        'photos' => 'nullable|array',         
+        'photos.*.url' => 'required|string',  
+        'photos.*.type' => 'required|in:image,video', 
 
-    {
+        'event_category_id' => 'nullable|exists:event_categories,id',
+        'privacy' => 'required|in:public,private',
+        'tag_user_ids' => 'nullable|array',
+        'tag_user_ids.*' => 'exists:users,id'
+    ]);
 
-        // dd(auth()->id(), auth()->user());
-
-        //manual validation due to sendError custom method for error responses
-        $validator = Validator::make($request->all(), [
-            'caption' => 'nullable|string',
-            'photo' => 'nullable|string',
-            'event_category_id' => 'nullable|exists:event_categories,id',
-            'privacy' => 'required|in:public,private',
-            'tag_user_ids' => 'nullable|array',
-            'tag_user_ids.*' => 'exists:users,id'
-        ]);
-
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
-        }
-
-        // $request->validate([
-        //     'caption' => 'nullable|string',
-        //     'photo' => 'nullable|string',
-        //     'event_category_id' => 'nullable|exists:event_categories,id',
-        //     'privacy' => 'required|in:public,private',
-        //     'tag_user_ids' => 'nullable|array',
-        //     'tag_user_ids.*' => 'exists:users,id'
-        // ]);
-
-        $post = Post::create([
-            'user_id' => auth()->id(),
-            'caption' => $request->caption,
-            'photo' => $request->photo,
-            'event_category_id' => $request->event_category_id,
-            'privacy' => $request->privacy
-        ]);
-
-        if ($request->has('tag_user_ids')) {
-            foreach ($request->tag_user_ids as $userId) {
-                PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
-            }
-        }
-
-        // return response()->json($post);
-        return $this->sendResponse('Post created successfully', $post, 201);
-
-
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
     }
+
+    $post = Post::create([
+        'user_id' => auth()->id(),
+        'caption' => $request->caption,
+        'photo' => null,  
+        'event_category_id' => $request->event_category_id,
+        'privacy' => $request->privacy
+    ]);
+
+    if ($request->has('tag_user_ids')) {
+        foreach ($request->tag_user_ids as $userId) {
+            PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
+        }
+    }
+
+    if ($request->has('photos')) {
+        foreach ($request->photos as $media) {
+            PostMedia::create([
+                'post_id' => $post->id,
+                'url' => $media['url'],
+                'type' => $media['type']
+            ]);
+        }
+    }
+
+    return $this->sendResponse('Post created successfully', $post->load('media'), 201);
+}
+
+
+    // public function store(Request $request)
+
+    // {
+
+    //     // dd(auth()->id(), auth()->user());
+
+    //     //manual validation due to sendError custom method for error responses
+    //     $validator = Validator::make($request->all(), [
+    //         'caption' => 'nullable|string',
+    //         'photo' => 'nullable|string',
+    //         'event_category_id' => 'nullable|exists:event_categories,id',
+    //         'privacy' => 'required|in:public,private',
+    //         'tag_user_ids' => 'nullable|array',
+    //         'tag_user_ids.*' => 'exists:users,id'
+    //     ]);
+
+    //     if ($validator->fails()) {
+    //         return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    //     }
+
+    //     // $request->validate([
+    //     //     'caption' => 'nullable|string',
+    //     //     'photo' => 'nullable|string',
+    //     //     'event_category_id' => 'nullable|exists:event_categories,id',
+    //     //     'privacy' => 'required|in:public,private',
+    //     //     'tag_user_ids' => 'nullable|array',
+    //     //     'tag_user_ids.*' => 'exists:users,id'
+    //     // ]);
+
+    //     $post = Post::create([
+    //         'user_id' => auth()->id(),
+    //         'caption' => $request->caption,
+    //         'photo' => $request->photo,
+    //         'event_category_id' => $request->event_category_id,
+    //         'privacy' => $request->privacy
+    //     ]);
+
+    //     if ($request->has('tag_user_ids')) {
+    //         foreach ($request->tag_user_ids as $userId) {
+    //             PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
+    //         }
+    //     }
+
+    //     // return response()->json($post);
+    //     return $this->sendResponse('Post created successfully', $post, 201);
+
+
+    // }
 
     /**
      * Display the specified resource.
@@ -83,7 +130,7 @@ class PostController extends Controller
     public function show($id)
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
-        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user'])->find($id);
+        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user','media'])->find($id);
         if (!$post) {
             return $this->sendError('Post not found', [], 404);
         }
