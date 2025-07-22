@@ -30,9 +30,9 @@ class PostController extends Controller
 {
     $validator = Validator::make($request->all(), [
         'caption' => 'nullable|string',
-        'photos' => 'nullable|array',         
-        'photos.*.url' => 'required|string',  
-        'photos.*.type' => 'required|in:image,video', 
+        'photos' => 'nullable|array',
+        'photos.*.url' => 'required|string',
+        'photos.*.type' => 'required|in:image,video',
 
         'event_category_id' => 'nullable|exists:event_categories,id',
         'privacy' => 'required|in:public,private',
@@ -47,7 +47,7 @@ class PostController extends Controller
     $post = Post::create([
         'user_id' => auth()->id(),
         'caption' => $request->caption,
-        'photo' => null,  
+        'photo' => null,
         'event_category_id' => $request->event_category_id,
         'privacy' => $request->privacy
     ]);
@@ -382,13 +382,17 @@ public function publicPostsWithFollowersFollowing($id)
         $postCount = $publicPosts->count();
 
         $followers = $user->followers()->with('follower')->get()->pluck('follower');
+        $followersCount = $followers->count();
         $following = $user->following()->with('following')->get()->pluck('following');
+        $followingCount = $following->count();
 
         return $this->sendResponse('Public posts with followers and following fetched', [
             'public_posts' => $publicPosts,
             'post_count' => $postCount,
             'followers' => $followers,
-            'following' => $following
+            'followers_count' => $followersCount,
+            'following' => $following,
+            'following_count' => $followingCount
         ]);
     } catch (\Exception $e) {
         return $this->sendError('Something went wrong', [$e->getMessage()], 500);
