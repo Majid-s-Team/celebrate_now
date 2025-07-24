@@ -22,54 +22,54 @@ class PostController extends Controller
     public function index()
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
-        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user','media'])->get();
+        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user', 'media'])->get();
         return $this->sendResponse('Posts fetched successfully', $posts);
     }
 
     public function store(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'caption' => 'nullable|string',
-        'photos' => 'nullable|array',
-        'photos.*.url' => 'required|string',
-        'photos.*.type' => 'required|in:image,video',
+    {
+        $validator = Validator::make($request->all(), [
+            'caption' => 'nullable|string',
+            'photos' => 'nullable|array',
+            'photos.*.url' => 'required|string',
+            'photos.*.type' => 'required|in:image,video',
 
-        'event_category_id' => 'nullable|exists:event_categories,id',
-        'privacy' => 'required|in:public,private',
-        'tag_user_ids' => 'nullable|array',
-        'tag_user_ids.*' => 'exists:users,id'
-    ]);
+            'event_category_id' => 'nullable|exists:event_categories,id',
+            'privacy' => 'required|in:public,private',
+            'tag_user_ids' => 'nullable|array',
+            'tag_user_ids.*' => 'exists:users,id'
+        ]);
 
-    if ($validator->fails()) {
-        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
-    }
-
-    $post = Post::create([
-        'user_id' => auth()->id(),
-        'caption' => $request->caption,
-        'photo' => null,
-        'event_category_id' => $request->event_category_id,
-        'privacy' => $request->privacy
-    ]);
-
-    if ($request->has('tag_user_ids')) {
-        foreach ($request->tag_user_ids as $userId) {
-            PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
-    }
 
-    if ($request->has('photos')) {
-        foreach ($request->photos as $media) {
-            PostMedia::create([
-                'post_id' => $post->id,
-                'url' => $media['url'],
-                'type' => $media['type']
-            ]);
+        $post = Post::create([
+            'user_id' => auth()->id(),
+            'caption' => $request->caption,
+            'photo' => null,
+            'event_category_id' => $request->event_category_id,
+            'privacy' => $request->privacy
+        ]);
+
+        if ($request->has('tag_user_ids')) {
+            foreach ($request->tag_user_ids as $userId) {
+                PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
+            }
         }
-    }
 
-    return $this->sendResponse('Post created successfully', $post->load('media'), 201);
-}
+        if ($request->has('photos')) {
+            foreach ($request->photos as $media) {
+                PostMedia::create([
+                    'post_id' => $post->id,
+                    'url' => $media['url'],
+                    'type' => $media['type']
+                ]);
+            }
+        }
+
+        return $this->sendResponse('Post created successfully', $post->load('media'), 201);
+    }
 
 
     // public function store(Request $request)
@@ -130,7 +130,20 @@ class PostController extends Controller
     public function show($id)
     {
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
-        $post = Post::with(['user', 'tags.user', 'likes', 'comments.user','media'])->find($id);
+        $post = Post::withCount(['likes', 'comments'])
+
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])->find($id);
         if (!$post) {
             return $this->sendError('Post not found', [], 404);
         }
@@ -161,7 +174,7 @@ class PostController extends Controller
         } else {
             PostLike::create(['user_id' => auth()->id(), 'post_id' => $id]);
             // return response()->json(['message' => 'Liked']);
-                        return $this->sendResponse('Post Liked');
+            return $this->sendResponse('Post Liked');
 
         }
     }
@@ -198,204 +211,323 @@ class PostController extends Controller
         $users = PostLike::with('user')->where('post_id', $id)->get();
         return $this->sendResponse('Liked users fetched', $users);
     }
-
+    // modified to return the user object as well
     public function myPosts()
     {
-        // return Post::withCount(['likes', 'comments'])
-        //     ->with(['tags.user'])
-        //     ->where('user_id', auth()->id())
-        //     ->get();
+        $user = auth()->user();
         $posts = Post::withCount(['likes', 'comments'])
-            ->with(['tags.user','media'])
-            ->where('user_id', auth()->id())
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])
+            ->where('user_id', $user->id)
             ->get();
 
-        return $this->sendResponse('My posts fetched', $posts);
+        return $this->sendResponse('My posts fetched', [
+            'posts' => $posts
+        ]);
     }
 
-    public function myPostsByCategory($categoryId)
-    {
-        // return Post::withCount(['likes', 'comments'])
-        //     ->with(['tags.user'])
-        //     ->where('user_id', auth()->id())
-        //     ->where('event_category_id', $categoryId)
-        //     ->get();
+    // public function myPostsByCategory($categoryId)
+    // {
+    //     $posts = Post::with(['tags.user', 'comments.user', 'comments.likes', 'comments.replies', 'likes'])
+    //         ->where('user_id', auth()->id())
+    //         ->where('event_category_id', $categoryId)
+    //         ->get()
+    //         ->map(function ($post) {
+    //             return [
+    //                 'id' => $post->id,
+    //                 'caption' => $post->caption,
+    //                 'event_category_id' => $post->event_category_id,
+    //                 'privacy' => $post->privacy,
+    //                 'tagged_users' => $post->tags->pluck('user'),
+    //                 'likes_count' => $post->likes->count(),
+    //                 'comments_count' => $post->comments->count(),
+    //                 'comments' => $post->comments->map(function ($comment) {
+    //                     return [
+    //                         'id' => $comment->id,
+    //                         'body' => $comment->body,
+    //                         'user' => $comment->user,
+    //                         'likes_count' => $comment->likes->count(),
+    //                         'replies_count' => $comment->replies->count(),
+    //                         'replies' => $comment->replies->map(function ($reply) {
+    //                             return [
+    //                                 'id' => $reply->id,
+    //                                 'body' => $reply->body,
+    //                                 'user' => $reply->user,
+    //                             ];
+    //                         }),
+    //                     ];
+    //                 }),
+    //             ];
+    //         });
 
-           $posts = Post::withCount(['likes', 'comments'])
-            ->with(['tags.user'])
-            ->where('user_id', auth()->id())
-            ->where('event_category_id', $categoryId)
-            ->get();
-
-        return $this->sendResponse('My posts by category fetched', $posts);
-    }
+    //     return $this->sendResponse('My posts by category fetched', $posts);
+    // }
 
     public function followingPosts(Request $request)
-{
-    $categoryId = $request->query('category_id');
+    {
+        $categoryId = $request->query('category_id');
 
-    $followingIds = auth()->user()->following()->pluck('following_id');
+        $followingIds = auth()->user()->following()->pluck('following_id');
 
-    // dd($followingIds);
+        // dd($followingIds);
 
-    $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
-        ->whereIn('user_id', $followingIds)
-        ->where(function ($q) {
-            $q->where('privacy', 'public')
-              ->orWhere('privacy', 'private');
+        $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
+            ->whereIn('user_id', $followingIds)
+            ->where(function ($q) {
+                $q->where('privacy', 'public')
+                    ->orWhere('privacy', 'private');
+            });
+
+        if ($categoryId) {
+            $query->where('event_category_id', $categoryId);
+        }
+
+        $posts = $query->latest()->get()->map(function ($post) {
+            return $this->formatPostWithCounts($post);
         });
 
-    if ($categoryId) {
-        $query->where('event_category_id', $categoryId);
+        // return response()->json($posts);
+        return $this->sendResponse('Following posts fetched', $posts);
+
     }
 
-    $posts = $query->latest()->get()->map(function ($post) {
-        return $this->formatPostWithCounts($post);
-    });
+    // public function allPosts(Request $request)
+// {
+//     $categoryId = $request->query('category_id');
 
-    // return response()->json($posts);
-            return $this->sendResponse('Following posts fetched', $posts);
+    //     $query = Post::with(['media'])
+//         ->where('privacy', 'public');
 
-}
-
-public function allPosts(Request $request)
-{
-    $categoryId = $request->query('category_id');
-
-    $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
-        ->where('privacy', 'public');
-
-    if ($categoryId) {
-        $query->where('event_category_id', $categoryId);
-    }
+    //     if ($categoryId) {
+//         $query->where('event_category_id', $categoryId);
+//     }
 
 
 
 
-    $posts = $query->latest()->get()->map(function ($post) {
-        //changed the function from formatPostWithCounts to formatPostCount
-        // to include the post count as well
-        return $this->formatPostCount($post);
-    });
+    //     $posts = $query->latest()->get()->map(function ($post) {
+//         //changed the function from formatPostWithCounts to formatPostCount
+//         // to include the post count as well
+//         return $this->formatPostCount($post);
+//     });
 
-    // return response()->json($posts);
-            return $this->sendResponse('All public posts fetched', $posts);
+    //     // return response()->json($posts);
+//             return $this->sendResponse('All public posts fetched', $posts);
 
-}
+    // }
 
-public function postDetails($id)
-{
-    $post = Post::with(['user', 'tags.user', 'likes.user', 'comments.user', 'comments.replies.user', 'comments.likes.user'])
-        ->findOrFail($id);
+    public function allPosts(Request $request)
+    {
+        $categoryId = $request->query('category_id');
 
-    // return response()->json($this->formatPostWithCounts($post));
-            return $this->sendResponse('Post details fetched', $this->formatPostWithCounts($post));
+        $query = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])
+            ->where('privacy', 'public');
 
-}
-
-private function formatPostWithCounts($post)
-{
-    return [
-        'id' => $post->id,
-        'user' => $post->user,
-        'caption' => $post->caption,
-        'photo' => $post->photo,
-        'privacy' => $post->privacy,
-        'event_category' => $post->category?->name,
-        'tagged_users' => $post->tags->pluck('user'),
-        'likes_count' => $post->likes->count(),
-        'comments_count' => $post->comments->count(),
-        'comments' => $post->comments->map(function ($comment) {
-            return [
-                'id' => $comment->id,
-                'body' => $comment->body,
-                'user' => $comment->user,
-                'likes_count' => $comment->likes->count(),
-                'replies_count' => $comment->replies->count(),
-                'replies' => $comment->replies->map(function ($reply) {
-                    return [
-                        'id' => $reply->id,
-                        'body' => $reply->body,
-                        'user' => $reply->user,
-                        'emojis' => $reply->emojis
-                    ];
-                }),
-            ];
-        })
-    ];
-}
-
-// new function to acutally count the posts as well
-
-private function formatPostCount($post)
-{
-    return [
-        'id' => $post->id,
-        'user' => $post->user,
-        'caption' => $post->caption,
-        'photo' => $post->photo,
-        'privacy' => $post->privacy,
-        'event_category' => $post->category?->name,
-        'tagged_users' => $post->tags->pluck('user'),
-        'post_count' => $post->count(),
-        'likes_count' => $post->likes->count(),
-        'comments_count' => $post->comments->count(),
-        'comments' => $post->comments->map(function ($comment) {
-            return [
-                'id' => $comment->id,
-                'body' => $comment->body,
-                'user' => $comment->user,
-                'likes_count' => $comment->likes->count(),
-                'replies_count' => $comment->replies->count(),
-                'replies' => $comment->replies->map(function ($reply) {
-                    return [
-                        'id' => $reply->id,
-                        'body' => $reply->body,
-                        'user' => $reply->user,
-                        'emojis' => $reply->emojis
-                    ];
-                }),
-            ];
-        })
-    ];
-}
-
-
-// returns public posts of a user with followers and following
-// this function is used in the api route /posts/{id}/with-counts
-public function publicPostsWithFollowersFollowing($id)
-{
-    try {
-        $user = User::find($id);
-             // Check if user exists
-         // If not, return an error response
-
-        if (!$user) {
-            return $this->sendError('User not found', [], 404);
+        if ($categoryId) {
+            $query->where('event_category_id', $categoryId);
         }
-        // Get public posts of the user
-        $publicPosts = Post::with(['tags.user', 'likes.user', 'comments.user'])
-            ->where('user_id', $user->id)
-            ->where('privacy', 'public')
-            ->get();
 
-        $postCount = $publicPosts->count();
+        $posts = $query->latest()->get();
+        ;
 
-        $followers = $user->followers()->with('follower')->get()->pluck('follower');
-        $followersCount = $followers->count();
-        $following = $user->following()->with('following')->get()->pluck('following');
-        $followingCount = $following->count();
-
-        return $this->sendResponse('Public posts with followers and following fetched', [
-            'public_posts' => $publicPosts,
-            'post_count' => $postCount,
-            'followers' => $followers,
-            'followers_count' => $followersCount,
-            'following' => $following,
-            'following_count' => $followingCount
+        return $this->sendResponse('All public posts fetched', [
+            'posts' => $posts
         ]);
-    } catch (\Exception $e) {
-        return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
-}
+
+
+    public function postDetails($id)
+    {
+        $post = Post::withCount(['likes', 'comments'])
+            ->where('privacy', 'public')
+            ->where('id', $id)
+            ->first();
+
+        if (!$post) {
+            return $this->sendError('Post not found', [], 404);
+        }
+
+        // Reload with full relationships including reply/user/likes nesting
+        $post->load([
+            'user',
+            'tags',
+            'tags.user',
+            'likes',
+            'likes.user',
+            'comments' => function ($query) {
+                $query->withCount('replies') // count replies per comment
+                    ->with(['user', 'likes.user', 'replies.user']); // eager load nested stuff
+            },
+            'media'
+        ]);
+
+        return $this->sendResponse('Post details fetched', [
+            'posts' => $post
+        ]);
+    }
+
+    // not using this as all returns should be similar
+// private function formatPostWithCounts($post)
+// {
+//     return [
+//         'id' => $post->id,
+//         'user' => $post->user,
+//         'caption' => $post->caption,
+//         'photo' => $post->photo,
+//         'privacy' => $post->privacy,
+//         'event_category' => $post->category?->name,
+//         'tagged_users' => $post->tags->pluck('user'),
+//         'likes_count' => $post->likes->count(),
+//         'comments_count' => $post->comments->count(),
+//         'comments' => $post->comments->map(function ($comment) {
+//             return [
+//                 'id' => $comment->id,
+//                 'body' => $comment->body,
+//                 'user' => $comment->user,
+//                 'likes_count' => $comment->likes->count(),
+//                 'replies_count' => $comment->replies->count(),
+//                 'replies' => $comment->replies->map(function ($reply) {
+//                     return [
+//                         'id' => $reply->id,
+//                         'body' => $reply->body,
+//                         'user' => $reply->user,
+//                         'emojis' => $reply->emojis
+//                     ];
+//                 }),
+//             ];
+//         })
+//     ];
+// }
+
+    // new function to acutally count the posts as well
+
+    // private function formatPostCount($post)
+// {
+//     return [
+//         'id' => $post->id,
+//         'user' => $post->user,
+//         'caption' => $post->caption,
+//         'photo' => $post->photo,
+//         'privacy' => $post->privacy,
+//         'event_category' => $post->category?->name,
+//         'tagged_users' => $post->tags->pluck('user'),
+//         'post_count' => $post->count(),
+//         'likes_count' => $post->likes->count(),
+//         'comments_count' => $post->comments->count(),
+//         'comments' => $post->comments->map(function ($comment) {
+//             return [
+//                 'id' => $comment->id,
+//                 'body' => $comment->body,
+//                 'user' => $comment->user,
+//                 'likes_count' => $comment->likes->count(),
+//                 'replies_count' => $comment->replies->count(),
+//                 'replies' => $comment->replies->map(function ($reply) {
+//                     return [
+//                         'id' => $reply->id,
+//                         'body' => $reply->body,
+//                         'user' => $reply->user,
+//                         'emojis' => $reply->emojis
+//                     ];
+//                 }),
+//             ];
+//         })
+//     ];
+// }
+
+
+    // returns public posts of a user with followers and following
+// this function is used in the api route /posts/{id}/with-counts
+//added the ability to search user by query params or ID
+// and returns the user object with followers and following counts
+// and public posts of that user with likes, comments, replies, media, and counts
+    public function publicPostsWithFollowersFollowing(Request $request, $id)
+    {
+        try {
+            // Search user by query params or ID
+            $name = $request->query('first_name');
+            $email = $request->query('email');
+            $contactNo = $request->query('contact_no');
+
+            $params = array_filter([
+                'first_name' => $name,
+                'email' => $email,
+                'contact_no' => $contactNo
+            ], fn($value) => $value !== null && $value !== '');
+
+            if (!empty($params)) {
+                $user = User::where(function ($query) use ($params) {
+                    foreach ($params as $key => $value) {
+                        $query->where($key, 'like', '%' . $value . '%');
+                    }
+                })->first();
+
+                if (!$user) {
+                    return $this->sendError('User not found by provided params', [], 404);
+                }
+            } else {
+                $user = User::find($id);
+                if (!$user) {
+                    return $this->sendError('User not found by id', [], 404);
+                }
+            }
+
+            // Load counts on user
+            $user->loadCount(['posts', 'followers', 'following']);
+
+            // Get followers & following with related user info
+            $followers = $user->followers()->with('follower')->get()->pluck('follower');
+            $following = $user->following()->with('following')->get()->pluck('following');
+
+            // Get public posts by user with likes, comments, replies, media, and counts
+            $publicPosts = Post::with([
+                'likes.user',
+                'comments.user',
+                'comments.likes.user',
+                'comments.replies.user',
+                'media',
+                'tags.user'
+            ])
+                ->withCount(['likes', 'comments'])
+                ->where('privacy', 'public')
+                ->where('user_id', $user->id)
+                ->latest()
+                ->get();
+
+            return $this->sendResponse('Public posts with followers and following fetched', [
+                'user' => $user,
+                'followers' => $followers,
+                'followers_count' => $followers->count(),
+                'following' => $following,
+                'following_count' => $following->count(),
+                'post_count' => $user->posts_count,
+                'public_posts' => $publicPosts,
+            ]);
+
+        } catch (\Exception $e) {
+            return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+        }
+    }
+
 }
