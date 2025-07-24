@@ -206,7 +206,7 @@ class PostController extends Controller
         //     ->where('user_id', auth()->id())
         //     ->get();
         $posts = Post::withCount(['likes', 'comments'])
-            ->with(['tags.user'])
+            ->with(['tags.user','media'])
             ->where('user_id', auth()->id())
             ->get();
 
