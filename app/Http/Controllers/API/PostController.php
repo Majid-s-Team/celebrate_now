@@ -273,33 +273,52 @@ class PostController extends Controller
     //     return $this->sendResponse('My posts by category fetched', $posts);
     // }
 
-    public function followingPosts(Request $request)
-    {
-        $categoryId = $request->query('category_id');
+    //function to show posts of users I follow
+    // removed formatPostWithCounts function as it was not used
+    // and added the ability to filter by category
+    // and return the posts with likes, comments, replies, media, and counts
 
-        $followingIds = auth()->user()->following()->pluck('following_id');
+   public function followingPosts(Request $request)
+{
+    $user = auth()->user();
+    $categoryId = $request->query('category_id');
 
-        // dd($followingIds);
+    $followingIds = $user->following()->pluck('following_id');
 
-        $query = Post::with(['user', 'tags.user', 'likes', 'comments.replies', 'comments.likes'])
-            ->whereIn('user_id', $followingIds)
-            ->where(function ($q) {
-                $q->where('privacy', 'public')
-                    ->orWhere('privacy', 'private');
-            });
-
-        if ($categoryId) {
-            $query->where('event_category_id', $categoryId);
-        }
-
-        $posts = $query->latest()->get()->map(function ($post) {
-            return $this->formatPostWithCounts($post);
+    $posts = Post::withCount(['likes', 'comments'])
+        ->with([
+            'user',
+            'tags',
+            'tags.user',
+            'likes',
+            'likes.user',
+            'media',
+            'comments' => function ($query) {
+                $query->withCount('replies')
+                      ->with([
+                          'user',
+                          'likes.user',
+                          'replies.user'
+                      ]);
+            }
+        ])
+        ->whereIn('user_id', $followingIds)
+        ->where(function ($q) {
+            $q->where('privacy', 'public')
+              ->orWhere('privacy', 'private');
         });
 
-        // return response()->json($posts);
-        return $this->sendResponse('Following posts fetched', $posts);
-
+    if ($categoryId) {
+        $posts->where('event_category_id', $categoryId);
     }
+
+    $posts = $posts->latest()->get();
+
+    return $this->sendResponse('Following posts fetched', [
+        'posts' => $posts
+    ]);
+}
+
 
     // public function allPosts(Request $request)
 // {
