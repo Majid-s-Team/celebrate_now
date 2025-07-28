@@ -19,10 +19,12 @@ use App\Models\User;
 
 class PostController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->get();
-        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user', 'media'])->get();
+        $perPage = $request->get('per_page', 10);
+        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])
+                    ->paginate($perPage);
+
         return $this->sendResponse('Posts fetched successfully', $posts);
     }
 
@@ -278,14 +280,17 @@ class PostController extends Controller
     // and added the ability to filter by category
     // and return the posts with likes, comments, replies, media, and counts
 
-   public function followingPosts(Request $request)
+public function followingPosts(Request $request)
 {
     $user = auth()->user();
     $categoryId = $request->query('category_id');
     $search = $request->query('search');
+    $perPage = $request->query('per_page', 10); // default: 10
+    $page = $request->query('page', 1);         // default: 1
+
     $followingIds = $user->following()->pluck('following_id')->toArray();
 
-    $posts = Post::withCount(['likes', 'comments'])
+    $postsQuery = Post::withCount(['likes', 'comments'])
         ->with([
             'user',
             'tags',
@@ -309,24 +314,27 @@ class PostController extends Controller
         });
 
     if ($categoryId) {
-        $posts->where('event_category_id', $categoryId);
+        $postsQuery->where('event_category_id', $categoryId);
     }
-     if ($search) {
-        $posts->whereHas('user', function ($q) use ($search) {
+
+    if ($search) {
+        $postsQuery->whereHas('user', function ($q) use ($search) {
             $q->where('first_name', 'like', "%{$search}%")
               ->orWhere('last_name', 'like', "%{$search}%");
         });
     }
 
-    $posts = $posts->latest()->get();
-    $posts->transform(function ($post) use ($followingIds) {
-            $post->isFollow = in_array($post->user_id, $followingIds);
-            return $post;
-        });
-    return $this->sendResponse('Following posts fetched', [
-        'posts' => $posts
-    ]);
+    $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+
+    // Add isFollow to each post
+    $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
+        $post->isFollow = in_array($post->user_id, $followingIds);
+        return $post;
+    });
+
+    return $this->sendResponse('Following posts fetched', $paginatedPosts);
 }
+
 
 
     // public function allPosts(Request $request)
@@ -355,46 +363,49 @@ class PostController extends Controller
     // }
 
     public function allPosts(Request $request)
-    {
-        $user = auth()->user();
-        $categoryId = $request->query('category_id');
-        $search = $request->query('search');
-        $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
+{
+    $user = auth()->user();
+    $categoryId = $request->query('category_id');
+    $search = $request->query('search');
+    $perPage = $request->get('per_page', 10); // Default 10 per page
 
-        $query = Post::withCount(['likes', 'comments'])
-            ->with([
-                'user',
-                'tags',
-                'tags.user',
-                'likes',
-                'likes.user',
-                'comments' => function ($query) {
-                    $query->withCount('replies')
-                        ->with(['user', 'likes.user', 'replies.user']);
-                },
-                'media'
-            ])
-            ->where('privacy', 'public');
+    $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
 
-        if ($categoryId) {
-            $query->where('event_category_id', $categoryId);
-        }
-        if ($search) {
-            $query->whereHas('user', function ($q) use ($search) {
-                $q->where('first_name', 'like', "%{$search}%")
-                  ->orWhere('last_name', 'like', "%{$search}%");
-            });
-        }
-        $posts = $query->latest()->get();
-        $posts->transform(function ($post) use ($followingIds) {
-            $post->isFollow = in_array($post->user_id, $followingIds);
-            return $post;
-        });
+    $query = Post::withCount(['likes', 'comments'])
+        ->with([
+            'user',
+            'tags',
+            'tags.user',
+            'likes',
+            'likes.user',
+            'comments' => function ($query) {
+                $query->withCount('replies')
+                    ->with(['user', 'likes.user', 'replies.user']);
+            },
+            'media'
+        ])
+        ->where('privacy', 'public');
 
-        return $this->sendResponse('All public posts fetched', [
-            'posts' => $posts
-        ]);
+    if ($categoryId) {
+        $query->where('event_category_id', $categoryId);
     }
+
+    if ($search) {
+        $query->whereHas('user', function ($q) use ($search) {
+            $q->where('first_name', 'like', "%{$search}%")
+              ->orWhere('last_name', 'like', "%{$search}%");
+        });
+    }
+
+    $posts = $query->latest()->paginate($perPage);
+
+    $posts->getCollection()->transform(function ($post) use ($followingIds) {
+        $post->isFollow = in_array($post->user_id, $followingIds);
+        return $post;
+    });
+
+    return $this->sendResponse('All public posts fetched', $posts);
+}
 
 
     public function postDetails($id)
@@ -501,46 +512,44 @@ class PostController extends Controller
 //added the ability to search user by query params or ID
 // and returns the user object with followers and following counts
 // and public posts of that user with likes, comments, replies, media, and counts
-    public function publicPostsWithFollowersFollowing(Request $request, $id)
-    {
-        try {
-            // Search user by query params or ID
-            $name = $request->query('first_name');
-            $email = $request->query('email');
-            $contactNo = $request->query('contact_no');
+   public function publicPostsWithFollowersFollowing(Request $request, $id)
+{
+    try {
+        $name = $request->query('first_name');
+        $email = $request->query('email');
+        $contactNo = $request->query('contact_no');
 
-            $params = array_filter([
-                'first_name' => $name,
-                'email' => $email,
-                'contact_no' => $contactNo
-            ], fn($value) => $value !== null && $value !== '');
+        $params = array_filter([
+            'first_name' => $name,
+            'email' => $email,
+            'contact_no' => $contactNo
+        ], fn($value) => $value !== null && $value !== '');
 
-            if (!empty($params)) {
-                $user = User::where(function ($query) use ($params) {
-                    foreach ($params as $key => $value) {
-                        $query->where($key, 'like', '%' . $value . '%');
-                    }
-                })->first();
-
-                if (!$user) {
-                    return $this->sendError('User not found by provided params', [], 404);
+        if (!empty($params)) {
+            $user = User::where(function ($query) use ($params) {
+                foreach ($params as $key => $value) {
+                    $query->where($key, 'like', '%' . $value . '%');
                 }
-            } else {
-                $user = User::find($id);
-                if (!$user) {
-                    return $this->sendError('User not found by id', [], 404);
-                }
+            })->first();
+
+            if (!$user) {
+                return $this->sendError('User not found by provided params', [], 404);
             }
+        } else {
+            $user = User::find($id);
+            if (!$user) {
+                return $this->sendError('User not found by id', [], 404);
+            }
+        }
 
-            // Load counts on user
-            $user->loadCount(['posts', 'followers', 'following']);
+        $user->loadCount(['posts', 'followers', 'following']);
 
-            // Get followers & following with related user info
-            $followers = $user->followers()->with('follower')->get()->pluck('follower');
-            $following = $user->following()->with('following')->get()->pluck('following');
 
-            // Get public posts by user with likes, comments, replies, media, and counts
-            $publicPosts = Post::with([
+        $followers = $user->followers()->with('follower')->get()->pluck('follower');
+        $following = $user->following()->with('following')->get()->pluck('following');
+
+        $perPage = $request->get('per_page');
+        $publicPostsQuery = Post::with([
                 'likes.user',
                 'comments.user',
                 'comments.likes.user',
@@ -548,25 +557,32 @@ class PostController extends Controller
                 'media',
                 'tags.user'
             ])
-                ->withCount(['likes', 'comments'])
-                ->where('privacy', 'public')
-                ->where('user_id', $user->id)
-                ->latest()
-                ->get();
+            ->withCount(['likes', 'comments'])
+            ->where('privacy', 'public')
+            ->where('user_id', $user->id)
+            ->latest();
 
-            return $this->sendResponse('Public posts with followers and following fetched', [
-                'user' => $user,
-                'followers' => $followers,
-                'followers_count' => $followers->count(),
-                'following' => $following,
-                'following_count' => $following->count(),
-                'post_count' => $user->posts_count,
-                'public_posts' => $publicPosts,
-            ]);
-
-        } catch (\Exception $e) {
-            return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+        if ($perPage === 'all') {
+            $publicPosts = $publicPostsQuery->get();
+        } else {
+            $perPage = is_numeric($perPage) ? (int) $perPage : 10;
+            $publicPosts = $publicPostsQuery->paginate($perPage);
         }
+
+        return $this->sendResponse('Public posts with followers and following fetched', [
+            'user' => $user,
+            'followers' => $followers,
+            'followers_count' => $followers->count(),
+            'following' => $following,
+            'following_count' => $following->count(),
+            'post_count' => $user->posts_count,
+            'public_posts' => $publicPosts,
+        ]);
+
+    } catch (\Exception $e) {
+        return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
+}
+
 
 }

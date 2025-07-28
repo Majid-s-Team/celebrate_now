@@ -20,7 +20,8 @@ class EventCategoryController extends Controller
 {
     public function index()
     {
-        $categories = EventCategory::all();
+        $perPage = request()->get('per_page', 10);
+        $categories = EventCategory::paginate($perPage);
         return $this->sendResponse('Event categories fetched successfully', $categories);
     }
 

@@ -58,39 +58,48 @@ class FollowController extends Controller
 
     public function followers()
     {
+        $perPage = request()->get('per_page', 10);
+
         $followers = auth()->user()
             ->followers()
             ->with('follower')
-            ->get();
+            ->paginate($perPage);
 
         return $this->sendResponse('Followers fetched successfully', $followers);
     }
 
+
     public function following()
     {
+        $perPage = request()->get('per_page', 10);
+
         $following = auth()->user()
             ->following()
             ->with('following')
-            ->get();
+            ->paginate($perPage);
 
         return $this->sendResponse('Following fetched successfully', $following);
     }
+
     // returns all the followings and followers of the authenticated user
-    public function myNetwork()
+   public function myNetwork()
     {
+        $perPage = request()->get('per_page', 10);
+
         $followers = auth()->user()
             ->followers()
             ->with('follower')
-            ->get();
+            ->paginate($perPage, ['*'], 'followers_page');
 
         $following = auth()->user()
             ->following()
             ->with('following')
-            ->get();
+            ->paginate($perPage, ['*'], 'following_page');
 
         return $this->sendResponse('Network fetched successfully', [
             'followers' => $followers,
             'following' => $following,
         ]);
     }
+
 }
