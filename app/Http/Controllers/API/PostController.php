@@ -1,7 +1,8 @@
 <?php
 
 namespace App\Http\Controllers\API;
-
+use App\Models\PostReport;
+use App\Models\ReportReason;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Post;
@@ -19,14 +20,24 @@ use App\Models\User;
 
 class PostController extends Controller
 {
-    public function index(Request $request)
-    {
-        $perPage = $request->get('per_page', 10);
-        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])
-                    ->paginate($perPage);
+public function index(Request $request)
+{
+    $perPage = $request->get('per_page', 10);
 
-        return $this->sendResponse('Posts fetched successfully', $posts);
-    }
+    $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])
+        ->whereHas('user', function ($q) {
+            $q->where('is_active', 1);
+        })
+        ->whereNull('deleted_at')
+        ->whereDoesntHave('reports', function ($q) {
+            $q->where('user_id', auth()->id());
+        })
+        ->latest()
+        ->paginate($perPage);
+
+    return $this->sendResponse('Posts fetched successfully', $posts);
+}
+
 
     public function store(Request $request)
     {
@@ -72,6 +83,113 @@ class PostController extends Controller
 
         return $this->sendResponse('Post created successfully', $post->load('media'), 201);
     }
+
+   public function update(Request $request, $id)
+{
+    $post = Post::with(['media', 'tags'])->findOrFail($id);
+
+    if ($post->user_id != auth()->id()) {
+        return $this->sendError('Unauthorized', [], 403);
+    }
+
+    $validator = Validator::make($request->all(), [
+        'caption' => 'nullable|string',
+        'privacy' => 'nullable|in:public,private',
+        'event_category_id' => 'nullable|exists:event_categories,id',
+        'tag_user_ids' => 'nullable|array',
+        'tag_user_ids.*' => 'exists:users,id',
+        'photos' => 'nullable|array',
+        'photos.*.url' => 'required|string',
+        'photos.*.type' => 'required|in:image,video',
+    ]);
+
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    }
+
+    $post->update([
+        'caption' => $request->caption,
+        'privacy' => $request->privacy,
+        'event_category_id' => $request->event_category_id,
+    ]);
+
+    // Sync tag users
+    if ($request->has('tag_user_ids')) {
+        PostTag::where('post_id', $post->id)->delete();
+        foreach ($request->tag_user_ids as $userId) {
+            PostTag::create([
+                'post_id' => $post->id,
+                'user_id' => $userId,
+            ]);
+        }
+    }
+
+    // Update photos - delete old, insert new
+    if ($request->has('photos')) {
+        PostMedia::where('post_id', $post->id)->delete();
+        foreach ($request->photos as $media) {
+            PostMedia::create([
+                'post_id' => $post->id,
+                'url' => $media['url'],
+                'type' => $media['type'],
+            ]);
+        }
+    }
+
+    return $this->sendResponse('Post updated successfully', $post->fresh()->load(['media', 'tags']));
+}
+
+public function destroy($id)
+{
+    $post = Post::findOrFail($id);
+    if ($post->user_id != auth()->id()) {
+        return $this->sendError('Unauthorized', [], 403);
+    }
+
+    $post->delete();
+    return $this->sendResponse('Post deleted successfully');
+}
+public function report(Request $request, $id)
+{
+    $validator = Validator::make($request->all(), [
+        'reason_id' => 'nullable|exists:report_reasons,id',
+        'other_reason' => 'nullable|string|max:1000'
+    ]);
+
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    }
+
+    $post = Post::findOrFail($id);
+    if ($post->user_id == auth()->id()) {
+        return $this->sendError('You cannot report your own post.', [], 403);
+    }
+
+    $alreadyReported = PostReport::where('post_id', $post->id)
+        ->where('user_id', auth()->id())
+        ->exists();
+
+    if ($alreadyReported) {
+        return $this->sendError('You have already reported this post.', [], 409);
+    }
+
+    $report = PostReport::create([
+        'post_id' => $post->id,
+        'user_id' => auth()->id(),
+        'reason_id' => $request->reason_id,
+        'other_reason' => $request->other_reason,
+    ]);
+
+    return $this->sendResponse('Post reported successfully', $report);
+}
+
+public function reportReasons(){
+    $reasons = ReportReason::all();
+    if ($reasons->isEmpty()) {
+        return $this->sendError('No report reasons found', [], 404);
+    }
+    return $this->sendResponse('Report reasons fetched successfully', $reasons);
+}
 
 
     // public function store(Request $request)
@@ -285,8 +403,8 @@ public function followingPosts(Request $request)
     $user = auth()->user();
     $categoryId = $request->query('category_id');
     $search = $request->query('search');
-    $perPage = $request->query('per_page', 10); // default: 10
-    $page = $request->query('page', 1);         // default: 1
+    $perPage = $request->query('per_page', 10); 
+    $page = $request->query('page', 1);         
 
     $followingIds = $user->following()->pluck('following_id')->toArray();
 
@@ -308,6 +426,8 @@ public function followingPosts(Request $request)
             }
         ])
         ->whereIn('user_id', $followingIds)
+    ->whereHas('user', fn ($q) => $q->where('is_active', 1)) 
+    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id())) 
         ->where(function ($q) {
             $q->where('privacy', 'public')
               ->orWhere('privacy', 'private');
@@ -384,8 +504,9 @@ public function followingPosts(Request $request)
             },
             'media'
         ])
-        ->where('privacy', 'public');
-
+    ->where('privacy', 'public')
+        ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+        ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()));
     if ($categoryId) {
         $query->where('event_category_id', $categoryId);
     }
@@ -410,10 +531,13 @@ public function followingPosts(Request $request)
 
     public function postDetails($id)
     {
-        $post = Post::withCount(['likes', 'comments'])
-            ->where('privacy', 'public')
-            ->where('id', $id)
-            ->first();
+            $post = Post::withCount(['likes', 'comments'])
+        ->where('privacy', 'public')
+        ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+        ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
+        ->where('id', $id)
+        ->first();
+
 
         if (!$post) {
             return $this->sendError('Post not found', [], 404);
@@ -557,11 +681,12 @@ public function followingPosts(Request $request)
                 'media',
                 'tags.user'
             ])
-            ->withCount(['likes', 'comments'])
-            ->where('privacy', 'public')
-            ->where('user_id', $user->id)
-            ->latest();
-
+->withCount(['likes', 'comments'])
+    ->where('privacy', 'public')
+    ->whereHas('user', fn ($q) => $q->where('is_active', 1)) 
+    ->where('user_id', $user->id)
+    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id())) 
+    ->latest();
         if ($perPage === 'all') {
             $publicPosts = $publicPostsQuery->get();
         } else {

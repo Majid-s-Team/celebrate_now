@@ -78,9 +78,9 @@ class AuthController extends Controller
             return $this->sendError('Invalid credentials', [], 401);
         }
 
-        if (!$user->is_active) {
-            return response()->json(['message' => 'Account is deactivated. Contact support.'], 403);
-        }
+        // if (!$user->is_active) {
+        //     return response()->json(['message' => 'Account is deactivated. Contact support.'], 403);
+        // }
 
         return $this->sendResponse('Login successful', [
             'token' => $user->createToken('API Token')->plainTextToken,
