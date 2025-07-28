@@ -283,7 +283,7 @@ class PostController extends Controller
     $user = auth()->user();
     $categoryId = $request->query('category_id');
     $search = $request->query('search');
-    $followingIds = $user->following()->pluck('following_id');
+    $followingIds = $user->following()->pluck('following_id')->toArray();
 
     $posts = Post::withCount(['likes', 'comments'])
         ->with([
@@ -319,7 +319,10 @@ class PostController extends Controller
     }
 
     $posts = $posts->latest()->get();
-
+    $posts->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            return $post;
+        });
     return $this->sendResponse('Following posts fetched', [
         'posts' => $posts
     ]);
@@ -353,8 +356,10 @@ class PostController extends Controller
 
     public function allPosts(Request $request)
     {
+        $user = auth()->user();
         $categoryId = $request->query('category_id');
         $search = $request->query('search');
+        $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
 
         $query = Post::withCount(['likes', 'comments'])
             ->with([
@@ -381,7 +386,10 @@ class PostController extends Controller
             });
         }
         $posts = $query->latest()->get();
-        
+        $posts->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            return $post;
+        });
 
         return $this->sendResponse('All public posts fetched', [
             'posts' => $posts
