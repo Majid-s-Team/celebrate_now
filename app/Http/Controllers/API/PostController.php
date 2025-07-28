@@ -282,7 +282,7 @@ class PostController extends Controller
 {
     $user = auth()->user();
     $categoryId = $request->query('category_id');
-
+    $search = $request->query('search');
     $followingIds = $user->following()->pluck('following_id');
 
     $posts = Post::withCount(['likes', 'comments'])
@@ -310,6 +310,12 @@ class PostController extends Controller
 
     if ($categoryId) {
         $posts->where('event_category_id', $categoryId);
+    }
+     if ($search) {
+        $posts->whereHas('user', function ($q) use ($search) {
+            $q->where('first_name', 'like', "%{$search}%")
+              ->orWhere('last_name', 'like', "%{$search}%");
+        });
     }
 
     $posts = $posts->latest()->get();
@@ -348,6 +354,7 @@ class PostController extends Controller
     public function allPosts(Request $request)
     {
         $categoryId = $request->query('category_id');
+        $search = $request->query('search');
 
         $query = Post::withCount(['likes', 'comments'])
             ->with([
@@ -367,9 +374,14 @@ class PostController extends Controller
         if ($categoryId) {
             $query->where('event_category_id', $categoryId);
         }
-
+        if ($search) {
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
         $posts = $query->latest()->get();
-        ;
+        
 
         return $this->sendResponse('All public posts fetched', [
             'posts' => $posts
