@@ -36,6 +36,8 @@ Route::prefix('auth')->group(function () {
 
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
+    Route::post('verify-otp-account', [OTPController::class, 'verifyOtpToActivateAccount']);
+
 
 
 Route::middleware('auth:sanctum')->group(function () {

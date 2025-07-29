@@ -81,20 +81,15 @@ class AuthController extends Controller
     }
 
     if (!$user->is_active) {
-        // Generate OTP
         $otp = rand(100000, 999999);
 
-        // Store or Update OTP in DB
         UserOtp::updateOrCreate(
             ['user_id' => $user->id],
             ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
         );
 
-        // TODO: Send OTP via mail here
-        // Mail::to($user->email)->send(new SendOtpMail($otp));
-
         return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
-            'otp' => $otp, // Show only in dev/test mode
+            'otp' => $otp, 
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ], 403);
@@ -106,39 +101,6 @@ class AuthController extends Controller
     ]);
 }
 
-
-// public function verifyOtp(Request $request)
-// {
-//     $request->validate([
-//         'email' => 'required|email',
-//         'otp'   => 'required'
-//     ]);
-
-//     $user = User::where('email', $request->email)->first();
-//     if (!$user) {
-//         return $this->sendError('User not found', [], 404);
-//     }
-
-//     $otpRecord = UserOtp::where('user_id', $user->id)
-//         ->where('otp', $request->otp)
-//         ->first();
-
-//     if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
-//         return $this->sendError('Invalid or expired OTP', [], 400);
-//     }
-
-//     // Activate user
-//     $user->is_active = true;
-//     $user->save();
-
-//     // Delete OTP
-//     $otpRecord->delete();
-
-//     return $this->sendResponse('OTP verified. Login successful.', [
-//         'token' => $user->createToken('API Token')->plainTextToken,
-//         'user'  => $user
-//     ]);
-// }
 
 
 
