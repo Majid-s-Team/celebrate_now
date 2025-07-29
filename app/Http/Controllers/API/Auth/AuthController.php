@@ -67,11 +67,12 @@ class AuthController extends Controller
         ], 201);
     }
 
-   public function login(Request $request)
+public function login(Request $request)
 {
     $request->validate([
         'email'    => 'required|email',
-        'password' => 'required'
+        'password' => 'required',
+        'otp'      => 'nullable|string'
     ]);
 
     $user = User::where('email', $request->email)->first();
@@ -80,65 +81,84 @@ class AuthController extends Controller
         return $this->sendError('Invalid credentials', [], 401);
     }
 
+    // If user is inactive
     if (!$user->is_active) {
-        // Generate OTP
-        $otp = rand(100000, 999999);
+        if ($request->filled('otp')) {
+            // 🔁 Call the verifyOtp method
+            return $this->verifyOtp($request);
+        } else {
+            // No OTP provided: generate and send new OTP
+            $otp = rand(100000, 999999);
 
-        // Store or Update OTP in DB
-        UserOtp::updateOrCreate(
-            ['user_id' => $user->id],
-            ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
-        );
+            UserOtp::updateOrCreate(
+                ['user_id' => $user->id],
+                ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
+            );
 
-        // TODO: Send OTP via mail here
-        // Mail::to($user->email)->send(new SendOtpMail($otp));
+            // TODO: Send OTP via mail
+            // Mail::to($user->email)->send(new SendOtpMail($otp));
 
-        return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
-            'otp' => $otp, // Show only in dev/test mode
-            'token' => $user->createToken('API Token')->plainTextToken,
-            'user' => $user
-        ], 403);
+            return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
+                'otp' => $otp, // Only for testing
+                'user' => $user
+            ], 403);
+        }
     }
 
+    // User is active: delete old tokens and login
+    $user->tokens()->delete();
+    $token = $user->createToken('API Token')->plainTextToken;
+
     return $this->sendResponse('Login successful', [
-        'token' => $user->createToken('API Token')->plainTextToken,
+        'token' => $token,
         'user'  => $user
     ]);
 }
 
 
-// public function verifyOtp(Request $request)
-// {
-//     $request->validate([
-//         'email' => 'required|email',
-//         'otp'   => 'required'
-//     ]);
 
-//     $user = User::where('email', $request->email)->first();
-//     if (!$user) {
-//         return $this->sendError('User not found', [], 404);
-//     }
+public function verifyOtp(Request $request)
+{
+    $request->validate([
+        'email' => 'required|email',
+        'otp'   => 'required'
+    ]);
 
-//     $otpRecord = UserOtp::where('user_id', $user->id)
-//         ->where('otp', $request->otp)
-//         ->first();
+    // Find the user by email
+    $user = User::where('email', $request->email)->first();
+    if (!$user) {
+        return $this->sendError('User not found', [], 404);
+    }
 
-//     if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
-//         return $this->sendError('Invalid or expired OTP', [], 400);
-//     }
+    // Find the OTP record
+    $otpRecord = UserOtp::where('user_id', $user->id)
+        ->where('otp', $request->otp)
+        ->first();
 
-//     // Activate user
-//     $user->is_active = true;
-//     $user->save();
+    // Check if OTP exists and is not expired
+    if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
+        return $this->sendError('Invalid or expired OTP', [], 400);
+    }
 
-//     // Delete OTP
-//     $otpRecord->delete();
+    // Activate the user
+    $user->is_active = true;
+    $user->save();
 
-//     return $this->sendResponse('OTP verified. Login successful.', [
-//         'token' => $user->createToken('API Token')->plainTextToken,
-//         'user'  => $user
-//     ]);
-// }
+    // Delete the OTP record
+    $otpRecord->delete();
+
+    // Delete all personal access tokens for the user
+    $user->tokens()->delete();
+
+    // Create a new token
+    $token = $user->createToken('API Token')->plainTextToken;
+
+    return $this->sendResponse('OTP verified. Login successful.', [
+        'token' => $token,
+        'user'  => $user
+    ]);
+}
+
 
 
 
