@@ -24,6 +24,8 @@ use App\Http\Controllers\API\EventCategoryController;
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+    // Route::post('/verify-otp', action: [AuthController::class, 'verifyOtp']);
+
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
 
     Route::post('/change-password', [AuthController::class, 'changePassword'])->middleware('auth:sanctum');

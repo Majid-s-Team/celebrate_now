@@ -7,10 +7,12 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
+use App\Models\UserOtp;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Traits\ImageUploadTrait;
 use Illuminate\Support\Facades\Validator;
+use Carbon\Carbon;
 
 class AuthController extends Controller
 {
@@ -65,28 +67,80 @@ class AuthController extends Controller
         ], 201);
     }
 
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email'    => 'required|email',
-            'password' => 'required'
-        ]);
+   public function login(Request $request)
+{
+    $request->validate([
+        'email'    => 'required|email',
+        'password' => 'required'
+    ]);
 
-        $user = User::where('email', $request->email)->first();
+    $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return $this->sendError('Invalid credentials', [], 401);
-        }
-
-        // if (!$user->is_active) {
-        //     return response()->json(['message' => 'Account is deactivated. Contact support.'], 403);
-        // }
-
-        return $this->sendResponse('Login successful', [
-            'token' => $user->createToken('API Token')->plainTextToken,
-            'user'  => $user
-        ]);
+    if (!$user || !Hash::check($request->password, $user->password)) {
+        return $this->sendError('Invalid credentials', [], 401);
     }
+
+    if (!$user->is_active) {
+        // Generate OTP
+        $otp = rand(100000, 999999);
+
+        // Store or Update OTP in DB
+        UserOtp::updateOrCreate(
+            ['user_id' => $user->id],
+            ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
+        );
+
+        // TODO: Send OTP via mail here
+        // Mail::to($user->email)->send(new SendOtpMail($otp));
+
+        return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
+            'otp' => $otp, // Show only in dev/test mode
+            'token' => $user->createToken('API Token')->plainTextToken,
+            'user' => $user
+        ], 403);
+    }
+
+    return $this->sendResponse('Login successful', [
+        'token' => $user->createToken('API Token')->plainTextToken,
+        'user'  => $user
+    ]);
+}
+
+
+// public function verifyOtp(Request $request)
+// {
+//     $request->validate([
+//         'email' => 'required|email',
+//         'otp'   => 'required'
+//     ]);
+
+//     $user = User::where('email', $request->email)->first();
+//     if (!$user) {
+//         return $this->sendError('User not found', [], 404);
+//     }
+
+//     $otpRecord = UserOtp::where('user_id', $user->id)
+//         ->where('otp', $request->otp)
+//         ->first();
+
+//     if (!$otpRecord || Carbon::parse($otpRecord->expires_at)->isPast()) {
+//         return $this->sendError('Invalid or expired OTP', [], 400);
+//     }
+
+//     // Activate user
+//     $user->is_active = true;
+//     $user->save();
+
+//     // Delete OTP
+//     $otpRecord->delete();
+
+//     return $this->sendResponse('OTP verified. Login successful.', [
+//         'token' => $user->createToken('API Token')->plainTextToken,
+//         'user'  => $user
+//     ]);
+// }
+
+
 
     public function updateProfile(Request $request)
     {

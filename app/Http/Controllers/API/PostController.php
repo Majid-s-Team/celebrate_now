@@ -332,29 +332,33 @@ public function reportReasons(){
         return $this->sendResponse('Liked users fetched', $users);
     }
     // modified to return the user object as well
-    public function myPosts()
-    {
-        $user = auth()->user();
-        $posts = Post::withCount(['likes', 'comments'])
-            ->with([
-                'user',
-                'tags',
-                'tags.user',
-                'likes',
-                'likes.user',
-                'comments' => function ($query) {
-                    $query->withCount('replies')
-                        ->with(['user', 'likes.user', 'replies.user']);
-                },
-                'media'
-            ])
-            ->where('user_id', $user->id)
-            ->get();
+   public function myPosts(Request $request)
+{
+    $user = auth()->user();
 
-        return $this->sendResponse('My posts fetched', [
-            'posts' => $posts
-        ]);
-    }
+    $perPage = $request->query('per_page', 10);
+    $page = $request->query('page', 1);
+
+    $postsQuery = Post::withCount(['likes', 'comments'])
+        ->with([
+            'user',
+            'tags',
+            'tags.user',
+            'likes',
+            'likes.user',
+            'comments' => function ($query) {
+                $query->withCount('replies')
+                      ->with(['user', 'likes.user', 'replies.user']);
+            },
+            'media'
+        ])
+        ->where('user_id', $user->id);
+
+    $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+
+    return $this->sendResponse('My posts fetched', $paginatedPosts);
+}
+
 
     // public function myPostsByCategory($categoryId)
     // {
@@ -403,8 +407,8 @@ public function followingPosts(Request $request)
     $user = auth()->user();
     $categoryId = $request->query('category_id');
     $search = $request->query('search');
-    $perPage = $request->query('per_page', 10); 
-    $page = $request->query('page', 1);         
+    $perPage = $request->query('per_page', 10);
+    $page = $request->query('page', 1);
 
     $followingIds = $user->following()->pluck('following_id')->toArray();
 
@@ -426,8 +430,8 @@ public function followingPosts(Request $request)
             }
         ])
         ->whereIn('user_id', $followingIds)
-    ->whereHas('user', fn ($q) => $q->where('is_active', 1)) 
-    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id())) 
+    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
         ->where(function ($q) {
             $q->where('privacy', 'public')
               ->orWhere('privacy', 'private');
@@ -451,6 +455,8 @@ public function followingPosts(Request $request)
         $post->isFollow = in_array($post->user_id, $followingIds);
         return $post;
     });
+
+    // dd($paginatedPosts->getCollection());
 
     return $this->sendResponse('Following posts fetched', $paginatedPosts);
 }
@@ -557,9 +563,8 @@ public function followingPosts(Request $request)
             'media'
         ]);
 
-        return $this->sendResponse('Post details fetched', [
-            'posts' => $post
-        ]);
+        return $this->sendResponse('Post details fetched', $post
+        );
     }
 
     // not using this as all returns should be similar
@@ -683,9 +688,9 @@ public function followingPosts(Request $request)
             ])
 ->withCount(['likes', 'comments'])
     ->where('privacy', 'public')
-    ->whereHas('user', fn ($q) => $q->where('is_active', 1)) 
+    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
     ->where('user_id', $user->id)
-    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id())) 
+    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
     ->latest();
         if ($perPage === 'all') {
             $publicPosts = $publicPostsQuery->get();

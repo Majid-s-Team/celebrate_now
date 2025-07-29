@@ -82,24 +82,54 @@ class FollowController extends Controller
     }
 
     // returns all the followings and followers of the authenticated user
-   public function myNetwork()
-    {
-        $perPage = request()->get('per_page', 10);
 
-        $followers = auth()->user()
-            ->followers()
-            ->with('follower')
-            ->paginate($perPage, ['*'], 'followers_page');
+    // modified to include proper pagination , club the followers and following into a single response.
+public function myNetwork()
+{
+    $perPage = request()->get('per_page', 10);
+    $page = request()->get('page', 1);
 
-        $following = auth()->user()
-            ->following()
-            ->with('following')
-            ->paginate($perPage, ['*'], 'following_page');
+    // Followers
+    $followersQuery = auth()->user()
+        ->followers()
+        ->with('follower');
 
-        return $this->sendResponse('Network fetched successfully', [
-            'followers' => $followers,
-            'following' => $following,
-        ]);
-    }
+    $followersTotal = $followersQuery->count();
+    $followers = $followersQuery
+        ->skip(($page - 1) * $perPage)
+        ->take($perPage)
+        ->get()
+        ->pluck('follower');
+
+    // Following
+    $followingQuery = auth()->user()
+        ->following()
+        ->with('following');
+
+    $followingTotal = $followingQuery->count();
+    $following = $followingQuery
+        ->skip(($page - 1) * $perPage)
+        ->take($perPage)
+        ->get()
+        ->pluck('following');
+
+    // Combine totals for shared pagination
+    $combinedTotal = max($followersTotal, $followingTotal); // Use max to reflect largest list
+
+    $pagination = [
+        'current_page'     => (int) $page,
+        'last_page'        => (int) ceil($combinedTotal / $perPage),
+        'per_page'         => (int) $perPage,
+        'total'            => (int) $combinedTotal,
+        'has_more_pages'   => $page < ceil($combinedTotal / $perPage),
+    ];
+
+    return $this->sendResponse('Network fetched successfully', [
+        'followers'  => $followers,
+        'following'  => $following,
+        'pagination' => $pagination,
+    ]);
+}
+
 
 }
