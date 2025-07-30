@@ -60,4 +60,41 @@ class OTPController extends Controller
         return $this->sendResponse('Password reset successful');
 
     }
+    public function verifyOtpToActivateAccount(Request $request)
+{
+    $request->validate([
+        'email' => 'required|email',
+        'otp' => 'required|digits:6',
+    ]);
+
+    $user = User::where('email', $request->email)->first();
+
+    if (!$user) {
+        return $this->sendError('User not found', [], 404);
+    }
+
+    $otpRecord = UserOtp::where('user_id', $user->id)
+                        ->where('otp', $request->otp)
+                        ->first();
+
+    if (!$otpRecord) {
+        return $this->sendError('Invalid OTP', [], 400);
+    }
+
+    if (Carbon::parse($otpRecord->expires_at)->isPast()) {
+        return $this->sendError('OTP has expired', [], 400);
+    }
+
+    $user->is_active = 1;
+    $user->email_verified_at = now(); 
+    $user->save();
+
+    $otpRecord->delete();
+
+    return $this->sendResponse('Account activated successfully', [
+        'token' => $user->createToken('API Token')->plainTextToken,
+        'user' => $user
+    ]);
+}
+
 }
