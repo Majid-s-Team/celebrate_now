@@ -56,30 +56,80 @@ class FollowController extends Controller
         }
     }
 
-    public function followers()
-    {
-        $perPage = request()->get('per_page', 10);
+ public function followers()
+{
+    $perPage = request()->get('per_page', 10);
+    $name = request()->get('name'); // name param
 
-        $followers = auth()->user()
-            ->followers()
-            ->with('follower')
-            ->paginate($perPage);
+    $loggedInUser = auth()->user();
 
-        return $this->sendResponse('Followers fetched successfully', $followers);
+    // Base query for followers with eager loading
+    $query = $loggedInUser
+        ->followers()
+        ->with('follower');
+
+    // Agar name param hai to filter karo first_name OR last_name me
+    if ($name) {
+        $query->whereHas('follower', function ($q) use ($name) {
+            $q->where('first_name', 'like', "%{$name}%")
+              ->orWhere('last_name', 'like', "%{$name}%");
+        });
     }
 
+    // Paginate query
+    $followers = $query->paginate($perPage);
 
-    public function following()
-    {
-        $perPage = request()->get('per_page', 10);
+    // Get IDs of users the logged-in user is following
+    $followingIds = $loggedInUser->following()->pluck('following_id')->toArray();
 
-        $following = auth()->user()
-            ->following()
-            ->with('following')
-            ->paginate($perPage);
+    // Mark each follower if followed by logged-in user
+    $followers->getCollection()->transform(function ($item) use ($followingIds) {
+        $followerUser = $item->follower;
+        $followerUser->is_followed = in_array($followerUser->id, $followingIds);
+        return $item;
+    });
 
-        return $this->sendResponse('Following fetched successfully', $following);
+    return $this->sendResponse('Followers fetched successfully', $followers);
+}
+
+
+ public function following()
+{
+    $perPage = request()->get('per_page', 10);
+    $name = request()->get('name'); // optional name filter
+    $loggedInUser = auth()->user();
+
+    // Base query for users you are following
+    $query = $loggedInUser
+        ->following()
+        ->with('following'); // eager load followed user
+
+    // Apply filter if name is provided
+    if ($name) {
+        $query->whereHas('following', function ($q) use ($name) {
+            $q->where('first_name', 'like', "%{$name}%")
+              ->orWhere('last_name', 'like', "%{$name}%");
+        });
     }
+
+    // Paginate results
+    $following = $query->paginate($perPage);
+
+    // Get IDs of users who follow the logged-in user
+    $followerIds = $loggedInUser->followers()->pluck('follower_id')->toArray();
+
+    // Check if followed users follow back
+    $following->getCollection()->transform(function ($item) use ($followerIds) {
+        $followingUser = $item->following;
+        $followingUser->is_followed_back = in_array($followingUser->id, $followerIds);
+        return $item;
+    });
+
+    return $this->sendResponse('Following fetched successfully', $following);
+}
+
+
+
 
     // returns all the followings and followers of the authenticated user
 
