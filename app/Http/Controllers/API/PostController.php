@@ -35,6 +35,11 @@ public function index(Request $request)
         ->latest()
         ->paginate($perPage);
 
+        $posts->getCollection()->transform(function ($post) {
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            return $post;
+        });
+
     return $this->sendResponse('Posts fetched successfully', $posts);
 }
 
@@ -264,9 +269,14 @@ public function reportReasons(){
                 },
                 'media'
             ])->find($id);
+
+
+
         if (!$post) {
             return $this->sendError('Post not found', [], 404);
         }
+        $post->is_liked = $post->likes->contains('user_id', auth()->id());
+
         return $this->sendResponse('Post fetched successfully', $post);
     }
 
@@ -355,6 +365,11 @@ public function reportReasons(){
         ->where('user_id', $user->id);
 
     $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+
+    $paginatedPosts->getCollection()->transform(function ($post) {
+    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+    return $post;
+});
 
     return $this->sendResponse('My posts fetched', $paginatedPosts);
 }
@@ -450,11 +465,12 @@ public function followingPosts(Request $request)
 
     $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
 
-    // Add isFollow to each post
+    // Add isFollow and is_likedto each post
     $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
-        $post->isFollow = in_array($post->user_id, $followingIds);
-        return $post;
-    });
+    $post->isFollow = in_array($post->user_id, $followingIds);
+    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+    return $post;
+});
 
     // dd($paginatedPosts->getCollection());
 
@@ -526,10 +542,11 @@ public function followingPosts(Request $request)
 
     $posts = $query->latest()->paginate($perPage);
 
-    $posts->getCollection()->transform(function ($post) use ($followingIds) {
-        $post->isFollow = in_array($post->user_id, $followingIds);
-        return $post;
-    });
+  $posts->getCollection()->transform(function ($post) use ($followingIds) {
+    $post->isFollow = in_array($post->user_id, $followingIds);
+    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+    return $post;
+});
 
     return $this->sendResponse('All public posts fetched', $posts);
 }
@@ -562,6 +579,8 @@ public function followingPosts(Request $request)
             },
             'media'
         ]);
+
+        $post->is_liked = $post->likes->contains('user_id', auth()->id());
 
         return $this->sendResponse('Post details fetched', $post
         );
@@ -636,12 +655,13 @@ public function followingPosts(Request $request)
 // }
 
 
+
     // returns public posts of a user with followers and following
 // this function is used in the api route /posts/{id}/with-counts
 //added the ability to search user by query params or ID
 // and returns the user object with followers and following counts
 // and public posts of that user with likes, comments, replies, media, and counts
-   public function publicPostsWithFollowersFollowing(Request $request, $id)
+public function publicPostsWithFollowersFollowing(Request $request, $id)
 {
     try {
         $name = $request->query('first_name');
@@ -673,11 +693,11 @@ public function followingPosts(Request $request)
 
         $user->loadCount(['posts', 'followers', 'following']);
 
-
         $followers = $user->followers()->with('follower')->get()->pluck('follower');
         $following = $user->following()->with('following')->get()->pluck('following');
 
-        $perPage = $request->get('per_page');
+        $perPage = $request->get('per_page', 10);
+
         $publicPostsQuery = Post::with([
                 'likes.user',
                 'comments.user',
@@ -686,33 +706,58 @@ public function followingPosts(Request $request)
                 'media',
                 'tags.user'
             ])
-->withCount(['likes', 'comments'])
-    ->where('privacy', 'public')
-    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-    ->where('user_id', $user->id)
-    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
-    ->latest();
+            ->withCount(['likes', 'comments'])
+            ->where('privacy', 'public')
+            ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+            ->where('user_id', $user->id)
+            ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
+            ->latest();
+
         if ($perPage === 'all') {
             $publicPosts = $publicPostsQuery->get();
+
+            // Add is_liked flag
+            $publicPosts->transform(function ($post) {
+                $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                return $post;
+            });
+
+            return $this->sendResponse('Public posts with followers and following fetched', [
+                'user' => $user,
+                'followers' => $followers,
+                'followers_count' => $followers->count(),
+                'following' => $following,
+                'following_count' => $following->count(),
+                'post_count' => $user->posts_count,
+                'public_posts' => $publicPosts,
+            ]);
         } else {
             $perPage = is_numeric($perPage) ? (int) $perPage : 10;
-            $publicPosts = $publicPostsQuery->paginate($perPage);
+            $paginatedPosts = $publicPostsQuery->paginate($perPage);
+
+            // Add is_liked flag for paginated posts collection
+            $paginatedPosts->getCollection()->transform(function ($post) {
+                $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                return $post;
+            });
+
+            return $this->sendResponse(
+                'Public posts with followers and following fetched',
+                $paginatedPosts,
+                200,
+                [
+                    'user' => $user,
+                    'followers' => $followers,
+                    'followers_count' => $followers->count(),
+                    'following' => $following,
+                    'following_count' => $following->count(),
+                    'post_count' => $user->posts_count,
+                ]
+            );
         }
-
-        return $this->sendResponse('Public posts with followers and following fetched', [
-            'user' => $user,
-            'followers' => $followers,
-            'followers_count' => $followers->count(),
-            'following' => $following,
-            'following_count' => $following->count(),
-            'post_count' => $user->posts_count,
-            'public_posts' => $publicPosts,
-        ]);
-
     } catch (\Exception $e) {
         return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
 }
-
 
 }

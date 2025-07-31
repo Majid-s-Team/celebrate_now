@@ -67,11 +67,12 @@ class AuthController extends Controller
         ], 201);
     }
 
-   public function login(Request $request)
+public function login(Request $request)
 {
     $request->validate([
         'email'    => 'required|email',
-        'password' => 'required'
+        'password' => 'required',
+        'otp'      => 'nullable|string'
     ]);
 
     $user = User::where('email', $request->email)->first();
@@ -80,6 +81,7 @@ class AuthController extends Controller
         return $this->sendError('Invalid credentials', [], 401);
     }
 
+    // If user is inactive
     if (!$user->is_active) {
         $otp = rand(100000, 999999);
 
@@ -89,14 +91,18 @@ class AuthController extends Controller
         );
 
         return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
-            'otp' => $otp, 
+            'otp' => $otp,
             'token' => $user->createToken('API Token')->plainTextToken,
             'user' => $user
         ], 403);
     }
 
+    // User is active: delete old tokens and login
+    $user->tokens()->delete();
+    $token = $user->createToken('API Token')->plainTextToken;
+
     return $this->sendResponse('Login successful', [
-        'token' => $user->createToken('API Token')->plainTextToken,
+        'token' => $token,
         'user'  => $user
     ]);
 }
