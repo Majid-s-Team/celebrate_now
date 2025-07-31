@@ -636,12 +636,13 @@ public function followingPosts(Request $request)
 // }
 
 
+
     // returns public posts of a user with followers and following
 // this function is used in the api route /posts/{id}/with-counts
 //added the ability to search user by query params or ID
 // and returns the user object with followers and following counts
 // and public posts of that user with likes, comments, replies, media, and counts
-   public function publicPostsWithFollowersFollowing(Request $request, $id)
+ public function publicPostsWithFollowersFollowing(Request $request, $id)
 {
     try {
         $name = $request->query('first_name');
@@ -673,11 +674,11 @@ public function followingPosts(Request $request)
 
         $user->loadCount(['posts', 'followers', 'following']);
 
-
         $followers = $user->followers()->with('follower')->get()->pluck('follower');
         $following = $user->following()->with('following')->get()->pluck('following');
 
-        $perPage = $request->get('per_page');
+        $perPage = $request->get('per_page', 10);
+
         $publicPostsQuery = Post::with([
                 'likes.user',
                 'comments.user',
@@ -686,33 +687,46 @@ public function followingPosts(Request $request)
                 'media',
                 'tags.user'
             ])
-->withCount(['likes', 'comments'])
-    ->where('privacy', 'public')
-    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-    ->where('user_id', $user->id)
-    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
-    ->latest();
+            ->withCount(['likes', 'comments'])
+            ->where('privacy', 'public')
+            ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+            ->where('user_id', $user->id)
+            ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
+            ->latest();
+
         if ($perPage === 'all') {
             $publicPosts = $publicPostsQuery->get();
+
+            return $this->sendResponse('Public posts with followers and following fetched', [
+                'user' => $user,
+                'followers' => $followers,
+                'followers_count' => $followers->count(),
+                'following' => $following,
+                'following_count' => $following->count(),
+                'post_count' => $user->posts_count,
+                'public_posts' => $publicPosts,
+            ]);
         } else {
             $perPage = is_numeric($perPage) ? (int) $perPage : 10;
-            $publicPosts = $publicPostsQuery->paginate($perPage);
+            $paginatedPosts = $publicPostsQuery->paginate($perPage);
+
+            return $this->sendResponse(
+                'Public posts with followers and following fetched',
+                $paginatedPosts,
+                200,
+                [
+                    'user' => $user,
+                    'followers' => $followers,
+                    'followers_count' => $followers->count(),
+                    'following' => $following,
+                    'following_count' => $following->count(),
+                    'post_count' => $user->posts_count,
+                ]
+            );
         }
-
-        return $this->sendResponse('Public posts with followers and following fetched', [
-            'user' => $user,
-            'followers' => $followers,
-            'followers_count' => $followers->count(),
-            'following' => $following,
-            'following_count' => $following->count(),
-            'post_count' => $user->posts_count,
-            'public_posts' => $publicPosts,
-        ]);
-
     } catch (\Exception $e) {
         return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
 }
-
 
 }

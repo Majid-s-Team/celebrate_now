@@ -84,6 +84,9 @@ class FollowController extends Controller
     // returns all the followings and followers of the authenticated user
 
     // modified to include proper pagination , club the followers and following into a single response.
+
+
+
 public function myNetwork()
 {
     $perPage = request()->get('per_page', 10);
