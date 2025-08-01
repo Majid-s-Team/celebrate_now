@@ -420,20 +420,13 @@ public function reportReasons(){
 public function followingPosts(Request $request)
 {
     $user = auth()->user();
-
     $categoryId = $request->query('category_id');
     $search = $request->query('search');
     $perPage = $request->query('per_page', 10);
     $page = $request->query('page', 1);
 
-    // Get both: following + followers
     $followingIds = $user->following()->pluck('following_id')->toArray();
-    $followerIds = $user->followers()->pluck('follower_id')->toArray();
 
-    // Combine and get unique user IDs
-    $userIds = array_unique(array_merge($followingIds, $followerIds));
-
-    // Fetch posts of those users
     $postsQuery = Post::withCount(['likes', 'comments'])
         ->with([
             'user',
@@ -451,9 +444,9 @@ public function followingPosts(Request $request)
                       ]);
             }
         ])
-        ->whereIn('user_id', $userIds)
-        ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-        ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
+        ->whereIn('user_id', $followingIds)
+    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
+    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
         ->where(function ($q) {
             $q->where('privacy', 'public')
               ->orWhere('privacy', 'private');
@@ -472,14 +465,16 @@ public function followingPosts(Request $request)
 
     $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
 
-    // Add flags to each post
+    // Add isFollow and is_likedto each post
     $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
-        $post->isFollow = in_array($post->user_id, $followingIds);
-        $post->is_liked = $post->likes->contains('user_id', auth()->id());
-        return $post;
-    });
+    $post->isFollow = in_array($post->user_id, $followingIds);
+    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+    return $post;
+});
 
-    return $this->sendResponse('Following + Followers posts fetched', $paginatedPosts);
+    // dd($paginatedPosts->getCollection());
+
+    return $this->sendResponse('Following posts fetched', $paginatedPosts);
 }
 
 
