@@ -742,19 +742,41 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
                 return $post;
             });
 
-            return $this->sendResponse(
-                'Public posts with followers and following fetched',
-                $paginatedPosts,
-                200,
-                [
-                    'user' => $user,
-                    'followers' => $followers,
-                    'followers_count' => $followers->count(),
-                    'following' => $following,
-                    'following_count' => $following->count(),
-                    'post_count' => $user->posts_count,
-                ]
-            );
+            $responseData = [
+    'user' => $user,
+    'followerss' => $followers,
+    'followers_counts' => $followers->count(),
+    'followings' => $following,
+    'following_counts' => $following->count(),
+    'post_count' => $user->posts_count,
+    'posts' => $paginatedPosts->items(),
+    'pagination' => [
+        'current_page' => $paginatedPosts->currentPage(),
+        'last_page' => $paginatedPosts->lastPage(),
+        'per_page' => $paginatedPosts->perPage(),
+        'total' => $paginatedPosts->total(),
+        'has_more_pages' => $paginatedPosts->hasMorePages(),
+    ],
+];
+            // dd($following->toArray());
+
+            // return $this->sendResponse(
+            //     'Public posts with followers and following fetched',
+            //      [
+            //         'user' => $user,
+            //         'followerss' => $followers,
+            //         'followers_counts' => $followers->count(),
+            //         'followings' => $following,
+            //         'following_counts' => $following->count(),
+            //         'post_count' => $user->posts_count,
+            //         'pagination' => $paginatedPosts
+            //      ],
+            //     200,
+
+            // );
+
+
+            return $this->sendResponse('Public posts with followers and following fetched.', $responseData);
         }
     } catch (\Exception $e) {
         return $this->sendError('Something went wrong', [$e->getMessage()], 500);
