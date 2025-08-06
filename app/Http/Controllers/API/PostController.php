@@ -778,6 +778,7 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
 
             $responseData = [
     'user' => $user,
+    'is_follow' => $isFollow,
     'followerss' => $followers,
     'followers_counts' => $followers->count(),
     'followings' => $following,
