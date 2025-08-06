@@ -715,6 +715,10 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
 
         $user->loadCount(['posts', 'followers', 'following']);
 
+        $isFollow = $user->followers()
+        ->where('follower_id', auth()->id())
+        ->exists();
+
         $followers = $user->followers()->with('follower')->get()->pluck('follower');
         $following = $user->following()->with('following')->get()->pluck('following');
 
@@ -750,6 +754,7 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
 
             return $this->sendResponse('Public posts with followers and following fetched', [
                 'user' => $user,
+                'is_follow' => $isFollow,
                 'followers' => $followers,
                 'followers_count' => $followers->count(),
                 'following' => $following,
