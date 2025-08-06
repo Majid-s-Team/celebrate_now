@@ -37,6 +37,11 @@ public function index(Request $request)
 
         $posts->getCollection()->transform(function ($post) {
             $post->is_liked = $post->likes->contains('user_id', auth()->id());
+
+        $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
             return $post;
         });
 
@@ -276,6 +281,10 @@ public function reportReasons(){
             return $this->sendError('Post not found', [], 404);
         }
         $post->is_liked = $post->likes->contains('user_id', auth()->id());
+         $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
 
         return $this->sendResponse('Post fetched successfully', $post);
     }
@@ -368,6 +377,10 @@ public function reportReasons(){
 
     $paginatedPosts->getCollection()->transform(function ($post) {
     $post->is_liked = $post->likes->contains('user_id', auth()->id());
+       $post->comments->transform(function ($comment) {
+            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+            return $comment;
+        });
     return $post;
 });
 
@@ -469,6 +482,10 @@ public function followingPosts(Request $request)
     $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
     $post->isFollow = in_array($post->user_id, $followingIds);
     $post->is_liked = $post->likes->contains('user_id', auth()->id());
+     $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
     return $post;
 });
 
@@ -582,6 +599,10 @@ public function followingPosts(Request $request)
         ]);
 
         $post->is_liked = $post->likes->contains('user_id', auth()->id());
+           $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
 
         return $this->sendResponse('Post details fetched', $post
         );
@@ -720,6 +741,10 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
             // Add is_liked flag
             $publicPosts->transform(function ($post) {
                 $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                  $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
                 return $post;
             });
 
@@ -739,6 +764,10 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
             // Add is_liked flag for paginated posts collection
             $paginatedPosts->getCollection()->transform(function ($post) {
                 $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                  $post->comments->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+        return $comment;
+    });
                 return $post;
             });
 
