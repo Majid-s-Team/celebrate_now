@@ -106,37 +106,51 @@ class CommentController extends Controller {
     }
 
 //Returns the comments on the of a post
-    public function postComments(Request $request, $id)
-    {
-        $perPage = $request->get('per_page', 10);
-        $post = Post::findOrFail($id);
+   public function postComments(Request $request, $id)
+{
+    $perPage = $request->get('per_page', 10);
+    $post = Post::find($id);
 
-        $commentsPaginated = $post->comments()->with('user')->paginate($perPage);
-        $commentsPaginated->getCollection()->transform(function ($comment) {
-            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-            return $comment;
+    if(!$post){
+        return $this->sendError('Post not found', [], 404);
+    };
+
+    $commentsPaginated = $post->comments()
+        ->with(['user', 'likes', 'replies.user', 'replies.likes']) // eager load everything
+        ->paginate($perPage);
+
+    // Transform comments to include `is_liked` and similar for replies
+    $commentsPaginated->getCollection()->transform(function ($comment) {
+        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+
+        $comment->replies->transform(function ($reply) {
+            $reply->is_liked = $reply->likes->contains('user_id', auth()->id());
+            return $reply;
         });
-        $commentsCount = $post->comments()->count();
 
-        // Comments data without pagination URLs
-        $commentsData = [
-            'data' => $commentsPaginated->items(),
-            'pagination' => [
-                'current_page' => $commentsPaginated->currentPage(),
-                'last_page' => $commentsPaginated->lastPage(),
-                'per_page' => $commentsPaginated->perPage(),
-                'total' => $commentsPaginated->total(),
-                'has_more_pages' => $commentsPaginated->hasMorePages(),
-            ]
-        ];
+        return $comment;
+    });
 
+    $commentsCount = $post->comments()->count();
 
-        return $this->sendResponse('Post comments fetched successfully.', [
-            'post' => $post,
-            'comments_count' => $commentsCount,
-            'comments' => $commentsData,
-        ]);
-    }
+    $commentsData = [
+        'data' => $commentsPaginated->items(),
+        'pagination' => [
+            'current_page' => $commentsPaginated->currentPage(),
+            'last_page' => $commentsPaginated->lastPage(),
+            'per_page' => $commentsPaginated->perPage(),
+            'total' => $commentsPaginated->total(),
+            'has_more_pages' => $commentsPaginated->hasMorePages(),
+        ]
+    ];
+
+    return $this->sendResponse('Post comments fetched successfully.', [
+        'post' => $post,
+        'comments_count' => $commentsCount,
+        'comments' => $commentsData,
+    ]);
+}
+
 
     public function likeReply($id)
     {
