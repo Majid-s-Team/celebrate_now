@@ -106,20 +106,28 @@ class CommentController extends Controller {
     }
 
 //Returns the comments on the of a post
-   public function postComments(Request $request, $id)
+public function postComments(Request $request, $id)
 {
     $perPage = $request->get('per_page', 10);
     $post = Post::find($id);
 
-    if(!$post){
+    if (!$post) {
         return $this->sendError('Post not found', [], 404);
-    };
+    }
 
+    // Fetch comments with all needed relationships + likes_count + replies_count
     $commentsPaginated = $post->comments()
-        ->with(['user', 'likes', 'replies.user', 'replies.likes']) // eager load everything
+        ->with([
+            'user',
+            'likes',
+            'replies' => function ($query) {
+                $query->with(['user', 'likes'])->withCount('likes'); // replies.likes_count
+            }
+        ])
+        ->withCount(['likes', 'replies']) // comment.likes_count, comment.replies_count
         ->paginate($perPage);
 
-    // Transform comments to include `is_liked` and similar for replies
+    // Transform comments
     $commentsPaginated->getCollection()->transform(function ($comment) {
         $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
 
@@ -131,8 +139,10 @@ class CommentController extends Controller {
         return $comment;
     });
 
+    // Total comment count on the post
     $commentsCount = $post->comments()->count();
 
+    // Final formatted response
     $commentsData = [
         'data' => $commentsPaginated->items(),
         'pagination' => [
@@ -150,6 +160,8 @@ class CommentController extends Controller {
         'comments' => $commentsData,
     ]);
 }
+
+
 
 
     public function likeReply($id)
