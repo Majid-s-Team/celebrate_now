@@ -84,7 +84,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Comment Routes
     Route::post('/posts/{id}/comment', [CommentController::class, 'store']);
     Route::post('/comments/{id}/like', [CommentController::class, 'like']);
+    Route::get('/posts/{id}/comments', [CommentController::class, 'postComments']); // get comments for a post
 
+    // Reply Routes
+
+Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
 
 
     Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);

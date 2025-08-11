@@ -10,13 +10,14 @@ use App\Models\PostLike;
 use App\Models\PostTag;
 use App\Models\Comment;
 use App\Models\CommentLike;
+use App\Models\ReplyLike;
 use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
 
 class CommentController extends Controller {
-    
+
     public function store(Request $request, $postId) {
         // $request->validate(['body' => 'required|string', 'emojis' => 'nullable|array']);
 
@@ -33,7 +34,7 @@ class CommentController extends Controller {
         if (!Post::where('id', $postId)->exists()) {
             return $this->sendError('Post not found', [], 404);
         }
-      
+
         $comment = Comment::create([
             'post_id' => $postId,
             'user_id' => auth()->id(),
@@ -49,13 +50,14 @@ class CommentController extends Controller {
     //     CommentLike::firstOrCreate(['comment_id' => $id, 'user_id' => auth()->id()]);
     //     return response()->json(['message' => 'Comment liked']);
     // }
+
     public function like($id) {
         // Check if the comment exists
         // If not, return an error response
         if (!Comment::where('id', $id)->exists()) {
             return $this->sendError('Comment not found', [], 404);
         }
-     
+
         $like = CommentLike::where('comment_id', $id)->where('user_id', auth()->id())->first();
         if ($like) {
             $like->delete();
@@ -102,4 +104,55 @@ class CommentController extends Controller {
         return $this->sendResponse('Reply posted successfully', $reply, 201);
 
     }
+
+//Returns the comments on the of a post
+    public function postComments(Request $request, $id)
+    {
+        $perPage = $request->get('per_page', 10);
+        $post = Post::findOrFail($id);
+
+        $commentsPaginated = $post->comments()->with('user')->paginate($perPage);
+        $commentsPaginated->getCollection()->transform(function ($comment) {
+            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+            return $comment;
+        });
+        $commentsCount = $post->comments()->count();
+
+        // Comments data without pagination URLs
+        $commentsData = [
+            'data' => $commentsPaginated->items(),
+            'pagination' => [
+                'current_page' => $commentsPaginated->currentPage(),
+                'last_page' => $commentsPaginated->lastPage(),
+                'per_page' => $commentsPaginated->perPage(),
+                'total' => $commentsPaginated->total(),
+                'has_more_pages' => $commentsPaginated->hasMorePages(),
+            ]
+        ];
+
+
+        return $this->sendResponse('Post comments fetched successfully.', [
+            'post' => $post,
+            'comments_count' => $commentsCount,
+            'comments' => $commentsData,
+        ]);
+    }
+
+    public function likeReply($id)
+    {
+        // Check if the reply exists
+        if (!Reply::where('id', $id)->exists()) {
+            return $this->sendError('Reply not found', [], 404);
+        }
+
+        $like = ReplyLike::where('reply_id', $id)->where('user_id', auth()->id())->first();
+        if ($like) {
+            $like->delete();
+            return $this->sendResponse('Reply unliked');
+        } else {
+            ReplyLike::create(['reply_id' => $id, 'user_id' => auth()->id()]);
+            return $this->sendResponse('Reply liked');
+        }
+    }
+
 }
