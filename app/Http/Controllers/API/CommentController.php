@@ -115,13 +115,16 @@ public function postComments(Request $request, $id)
         return $this->sendError('Post not found', [], 404);
     }
 
-    // Fetch comments with all needed relationships + likes_count + replies_count
+    // Fetch comments with all needed relationships + likes_count + replies_count , fecth by latest first
     $commentsPaginated = $post->comments()
+        ->orderBy('created_at', 'desc') // Latest comments first
         ->with([
             'user',
             'likes',
             'replies' => function ($query) {
-                $query->with(['user', 'likes'])->withCount('likes'); // replies.likes_count
+                $query->with(['user', 'likes'])
+                ->withCount('likes')
+                ->orderBy('created_at','desc');
             }
         ])
         ->withCount(['likes', 'replies']) // comment.likes_count, comment.replies_count
@@ -138,6 +141,10 @@ public function postComments(Request $request, $id)
 
         return $comment;
     });
+
+      $commentsPaginated->setCollection(
+        $commentsPaginated->getCollection()->sortByDesc('created_at')->values()
+    );
 
     // Total comment count on the post
     $commentsCount = $post->comments()->count();
