@@ -145,7 +145,7 @@ public function login(Request $request)
         //keys are the different types of images that can be uploaded i.e. profile, cover, post, gallery, logo
         $validator = Validator::make($request->all(), [
             'key'   => 'required|string|in:profile,cover,post,gallery,logo,video',
-            'image' => 'required|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm|max:10240',
+            'image' => 'required|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576',
         ]);
 
         if ($validator->fails()) {
