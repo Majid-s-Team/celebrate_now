@@ -550,13 +550,16 @@ public function followingPosts(Request $request)
     if ($categoryId) {
         $query->where('event_category_id', $categoryId);
     }
-
+    //search parameter fixed for searching for complete name
     if ($search) {
-        $query->whereHas('user', function ($q) use ($search) {
-            $q->where('first_name', 'like', "%{$search}%")
-              ->orWhere('last_name', 'like', "%{$search}%");
-        });
-    }
+    $query->whereHas('user', function ($q) use ($search) {
+        $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+          ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"]) // reverse order (optional)
+          ->orWhere('first_name', 'like', "%{$search}%")
+          ->orWhere('last_name', 'like', "%{$search}%");
+    });
+}
+
 
     $posts = $query->latest()->paginate($perPage);
 
