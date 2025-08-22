@@ -149,7 +149,7 @@ public function uploadImage(Request $request)
     ];
 
     if ($key === 'post') {
-        $rules['image'] = 'required|array|max:5';
+        $rules['image'] = 'required|array';
         $rules['image.*'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
     } else {
         $rules['image'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
