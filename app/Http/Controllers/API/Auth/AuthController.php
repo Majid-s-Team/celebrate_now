@@ -139,13 +139,23 @@ public function login(Request $request)
 
         return $this->sendResponse('Profile updated', $user);
     }
-    public function uploadImage(Request $request)
+public function uploadImage(Request $request)
 {
-    $validator = Validator::make($request->all(), [
-        'key'    => 'required|string|in:profile,cover,post,gallery,logo,video',
-        'image'  => 'required|array|max:5',
-        'image.*' => 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576',
-    ]);
+    $key = $request->input('key');
+
+    // Dynamic validation rules based on 'key'
+    $rules = [
+        'key' => 'required|string|in:profile,cover,post,gallery,logo,video',
+    ];
+
+    if ($key === 'post') {
+        $rules['image'] = 'required|array|max:5';
+        $rules['image.*'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
+    } else {
+        $rules['image'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
+    }
+
+    $validator = Validator::make($request->all(), $rules);
 
     if ($validator->fails()) {
         return $this->sendError('Validation failed', $validator->errors(), 422);
@@ -155,8 +165,10 @@ public function login(Request $request)
     $hasImage = false;
     $hasVideo = false;
 
-    foreach ($request->file('image') as $file) {
-        $url = $this->uploadImageByKey($file, $request->key);
+    $files = ($key === 'post') ? $request->file('image') : [$request->file('image')];
+
+    foreach ($files as $file) {
+        $url = $this->uploadImageByKey($file, $key);
         $uploadedUrls[] = $url;
 
         $mime = $file->getMimeType();
@@ -167,19 +179,11 @@ public function login(Request $request)
         }
     }
 
-    // Determine the response message
-    if ($hasImage && $hasVideo) {
-        $message = 'Media uploaded successfully';
-    } elseif ($hasImage) {
-        $message = 'Image uploaded successfully';
-    } elseif ($hasVideo) {
-        $message = 'Video uploaded successfully';
-    } else {
-        $message = 'Files uploaded successfully';
-    }
+    $message = 'Media uploaded successfully';
 
     return $this->sendResponse($message, ['urls' => $uploadedUrls], 201);
 }
+
 
 
     public function logout(Request $request)
