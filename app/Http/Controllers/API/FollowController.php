@@ -46,13 +46,13 @@ class FollowController extends Controller
 
         if ($follow) {
             $follow->delete();
-            return $this->sendResponse('Unfollowed');
+            return $this->sendResponse('User unfollowed successfully.');
         } else {
             Follow::create([
                 'follower_id' => auth()->id(),
                 'following_id' => $id
             ]);
-            return $this->sendResponse('Followed');
+            return $this->sendResponse('User followed successfully.');
         }
     }
 
