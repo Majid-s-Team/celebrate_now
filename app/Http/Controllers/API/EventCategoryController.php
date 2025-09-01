@@ -30,7 +30,7 @@ class EventCategoryController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
         ]);
-        if($validator->fails()) {
+        if ($validator->fails()) {
             return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
         $category = EventCategory::create(['name' => $request->name]);
@@ -43,12 +43,12 @@ class EventCategoryController extends Controller
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
         ]);
-        if($validator->fails()) {
+        if ($validator->fails()) {
             return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
         $category = EventCategory::find($id);
         if (!$category) {
-            return $this->sendError('Event category not found',  'No Event found for the id : ' . $id, 404);
+            return $this->sendError('Event category not found', 'No Event found for the id : ' . $id, 404);
         }
         $category->update(['name' => $request->name]);
 

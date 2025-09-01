@@ -20,33 +20,33 @@ use App\Models\User;
 
 class PostController extends Controller
 {
-public function index(Request $request)
-{
-    $perPage = $request->get('per_page', 10);
+    public function index(Request $request)
+    {
+        $perPage = $request->get('per_page', 10);
 
-    $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])
-        ->whereHas('user', function ($q) {
-            $q->where('is_active', 1);
-        })
-        ->whereNull('deleted_at')
-        ->whereDoesntHave('reports', function ($q) {
-            $q->where('user_id', auth()->id());
-        })
-        ->latest()
-        ->paginate($perPage);
+        $posts = Post::with(['user', 'tags.user', 'likes', 'comments.user'])
+            ->whereHas('user', function ($q) {
+                $q->where('is_active', 1);
+            })
+            ->whereNull('deleted_at')
+            ->whereDoesntHave('reports', function ($q) {
+                $q->where('user_id', auth()->id());
+            })
+            ->latest()
+            ->paginate($perPage);
 
         $posts->getCollection()->transform(function ($post) {
             $post->is_liked = $post->likes->contains('user_id', auth()->id());
 
-        $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
+            $post->comments->transform(function ($comment) {
+                $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                return $comment;
+            });
             return $post;
         });
 
-    return $this->sendResponse('Posts fetched successfully', $posts);
-}
+        return $this->sendResponse('Posts fetched successfully', $posts);
+    }
 
 
     public function store(Request $request)
@@ -94,112 +94,113 @@ public function index(Request $request)
         return $this->sendResponse('Post created successfully', $post->load('media'), 201);
     }
 
-   public function update(Request $request, $id)
-{
-    $post = Post::with(['media', 'tags'])->findOrFail($id);
+    public function update(Request $request, $id)
+    {
+        $post = Post::with(['media', 'tags'])->findOrFail($id);
 
-    if ($post->user_id != auth()->id()) {
-        return $this->sendError('Unauthorized', [], 403);
-    }
-
-    $validator = Validator::make($request->all(), [
-        'caption' => 'nullable|string',
-        'privacy' => 'nullable|in:public,private',
-        'event_category_id' => 'nullable|exists:event_categories,id',
-        'tag_user_ids' => 'nullable|array',
-        'tag_user_ids.*' => 'exists:users,id',
-        'photos' => 'nullable|array',
-        'photos.*.url' => 'required|string',
-        'photos.*.type' => 'required|in:image,video',
-    ]);
-
-    if ($validator->fails()) {
-        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
-    }
-
-    $post->update([
-        'caption' => $request->caption,
-        'privacy' => $request->privacy,
-        'event_category_id' => $request->event_category_id,
-    ]);
-
-    // Sync tag users
-    if ($request->has('tag_user_ids')) {
-        PostTag::where('post_id', $post->id)->delete();
-        foreach ($request->tag_user_ids as $userId) {
-            PostTag::create([
-                'post_id' => $post->id,
-                'user_id' => $userId,
-            ]);
+        if ($post->user_id != auth()->id()) {
+            return $this->sendError('Unauthorized', [], 403);
         }
-    }
 
-    // Update photos - delete old, insert new
-    if ($request->has('photos')) {
-        PostMedia::where('post_id', $post->id)->delete();
-        foreach ($request->photos as $media) {
-            PostMedia::create([
-                'post_id' => $post->id,
-                'url' => $media['url'],
-                'type' => $media['type'],
-            ]);
+        $validator = Validator::make($request->all(), [
+            'caption' => 'nullable|string',
+            'privacy' => 'nullable|in:public,private',
+            'event_category_id' => 'nullable|exists:event_categories,id',
+            'tag_user_ids' => 'nullable|array',
+            'tag_user_ids.*' => 'exists:users,id',
+            'photos' => 'nullable|array',
+            'photos.*.url' => 'required|string',
+            'photos.*.type' => 'required|in:image,video',
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
+
+        $post->update([
+            'caption' => $request->caption,
+            'privacy' => $request->privacy,
+            'event_category_id' => $request->event_category_id,
+        ]);
+
+        // Sync tag users
+        if ($request->has('tag_user_ids')) {
+            PostTag::where('post_id', $post->id)->delete();
+            foreach ($request->tag_user_ids as $userId) {
+                PostTag::create([
+                    'post_id' => $post->id,
+                    'user_id' => $userId,
+                ]);
+            }
+        }
+
+        // Update photos - delete old, insert new
+        if ($request->has('photos')) {
+            PostMedia::where('post_id', $post->id)->delete();
+            foreach ($request->photos as $media) {
+                PostMedia::create([
+                    'post_id' => $post->id,
+                    'url' => $media['url'],
+                    'type' => $media['type'],
+                ]);
+            }
+        }
+
+        return $this->sendResponse('Post updated successfully', $post->fresh()->load(['media', 'tags']));
     }
 
-    return $this->sendResponse('Post updated successfully', $post->fresh()->load(['media', 'tags']));
-}
+    public function destroy($id)
+    {
+        $post = Post::findOrFail($id);
+        if ($post->user_id != auth()->id()) {
+            return $this->sendError('Unauthorized', [], 403);
+        }
 
-public function destroy($id)
-{
-    $post = Post::findOrFail($id);
-    if ($post->user_id != auth()->id()) {
-        return $this->sendError('Unauthorized', [], 403);
+        $post->delete();
+        return $this->sendResponse('Post deleted successfully');
+    }
+    public function report(Request $request, $id)
+    {
+        $validator = Validator::make($request->all(), [
+            'reason_id' => 'nullable|exists:report_reasons,id',
+            'other_reason' => 'nullable|string|max:1000'
+        ]);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+        }
+
+        $post = Post::findOrFail($id);
+        if ($post->user_id == auth()->id()) {
+            return $this->sendError('You cannot report your own post.', [], 403);
+        }
+
+        $alreadyReported = PostReport::where('post_id', $post->id)
+            ->where('user_id', auth()->id())
+            ->exists();
+
+        if ($alreadyReported) {
+            return $this->sendError('You have already reported this post.', [], 409);
+        }
+
+        $report = PostReport::create([
+            'post_id' => $post->id,
+            'user_id' => auth()->id(),
+            'reason_id' => $request->reason_id,
+            'other_reason' => $request->other_reason,
+        ]);
+
+        return $this->sendResponse('Post reported successfully', $report);
     }
 
-    $post->delete();
-    return $this->sendResponse('Post deleted successfully');
-}
-public function report(Request $request, $id)
-{
-    $validator = Validator::make($request->all(), [
-        'reason_id' => 'nullable|exists:report_reasons,id',
-        'other_reason' => 'nullable|string|max:1000'
-    ]);
-
-    if ($validator->fails()) {
-        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    public function reportReasons()
+    {
+        $reasons = ReportReason::all();
+        if ($reasons->isEmpty()) {
+            return $this->sendError('No report reasons found', [], 404);
+        }
+        return $this->sendResponse('Report reasons fetched successfully', $reasons);
     }
-
-    $post = Post::findOrFail($id);
-    if ($post->user_id == auth()->id()) {
-        return $this->sendError('You cannot report your own post.', [], 403);
-    }
-
-    $alreadyReported = PostReport::where('post_id', $post->id)
-        ->where('user_id', auth()->id())
-        ->exists();
-
-    if ($alreadyReported) {
-        return $this->sendError('You have already reported this post.', [], 409);
-    }
-
-    $report = PostReport::create([
-        'post_id' => $post->id,
-        'user_id' => auth()->id(),
-        'reason_id' => $request->reason_id,
-        'other_reason' => $request->other_reason,
-    ]);
-
-    return $this->sendResponse('Post reported successfully', $report);
-}
-
-public function reportReasons(){
-    $reasons = ReportReason::all();
-    if ($reasons->isEmpty()) {
-        return $this->sendError('No report reasons found', [], 404);
-    }
-    return $this->sendResponse('Report reasons fetched successfully', $reasons);
-}
 
 
     // public function store(Request $request)
@@ -281,10 +282,10 @@ public function reportReasons(){
             return $this->sendError('Post not found', [], 404);
         }
         $post->is_liked = $post->likes->contains('user_id', auth()->id());
-         $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
+        $post->comments->transform(function ($comment) {
+            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+            return $comment;
+        });
 
         return $this->sendResponse('Post fetched successfully', $post);
     }
@@ -351,41 +352,41 @@ public function reportReasons(){
         return $this->sendResponse('Liked users fetched', $users);
     }
     // modified to return the user object as well
-   public function myPosts(Request $request)
-{
-    $user = auth()->user();
+    public function myPosts(Request $request)
+    {
+        $user = auth()->user();
 
-    $perPage = $request->query('per_page', 10);
-    $page = $request->query('page', 1);
+        $perPage = $request->query('per_page', 10);
+        $page = $request->query('page', 1);
 
-    $postsQuery = Post::withCount(['likes', 'comments'])
-        ->with([
-            'user',
-            'tags',
-            'tags.user',
-            'likes',
-            'likes.user',
-            'comments' => function ($query) {
-                $query->withCount('replies')
-                      ->with(['user', 'likes.user', 'replies.user']);
-            },
-            'media'
-        ])
-        ->where('user_id', $user->id);
+        $postsQuery = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])
+            ->where('user_id', $user->id);
 
-    $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+        $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
 
-    $paginatedPosts->getCollection()->transform(function ($post) {
-    $post->is_liked = $post->likes->contains('user_id', auth()->id());
-       $post->comments->transform(function ($comment) {
-            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-            return $comment;
+        $paginatedPosts->getCollection()->transform(function ($post) {
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            $post->comments->transform(function ($comment) {
+                $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                return $comment;
+            });
+            return $post;
         });
-    return $post;
-});
 
-    return $this->sendResponse('My posts fetched', $paginatedPosts);
-}
+        return $this->sendResponse('My posts fetched', $paginatedPosts);
+    }
 
 
     // public function myPostsByCategory($categoryId)
@@ -430,69 +431,69 @@ public function reportReasons(){
     // and added the ability to filter by category
     // and return the posts with likes, comments, replies, media, and counts
 
-public function followingPosts(Request $request)
-{
-    $user = auth()->user();
-    $categoryId = $request->query('category_id');
-    $search = $request->query('search');
-    $perPage = $request->query('per_page', 10);
-    $page = $request->query('page', 1);
+    public function followingPosts(Request $request)
+    {
+        $user = auth()->user();
+        $categoryId = $request->query('category_id');
+        $search = $request->query('search');
+        $perPage = $request->query('per_page', 10);
+        $page = $request->query('page', 1);
 
-    $followingIds = $user->following()->pluck('following_id')->toArray();
+        $followingIds = $user->following()->pluck('following_id')->toArray();
 
-    $postsQuery = Post::withCount(['likes', 'comments'])
-        ->with([
-            'user',
-            'tags',
-            'tags.user',
-            'likes',
-            'likes.user',
-            'media',
-            'comments' => function ($query) {
-                $query->withCount('replies')
-                      ->with([
-                          'user',
-                          'likes.user',
-                          'replies.user'
-                      ]);
-            }
-        ])
-        ->whereIn('user_id', $followingIds)
-    ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-    ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
-        ->where(function ($q) {
-            $q->where('privacy', 'public')
-              ->orWhere('privacy', 'private');
+        $postsQuery = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'media',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with([
+                            'user',
+                            'likes.user',
+                            'replies.user'
+                        ]);
+                }
+            ])
+            ->whereIn('user_id', $followingIds)
+            ->whereHas('user', fn($q) => $q->where('is_active', 1))
+            ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()))
+            ->where(function ($q) {
+                $q->where('privacy', 'public')
+                    ->orWhere('privacy', 'private');
+            });
+
+        if ($categoryId) {
+            $postsQuery->where('event_category_id', $categoryId);
+        }
+
+        if ($search) {
+            $postsQuery->whereHas('user', function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
+
+        $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+
+        // Add isFollow and is_likedto each post
+        $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            $post->comments->transform(function ($comment) {
+                $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                return $comment;
+            });
+            return $post;
         });
 
-    if ($categoryId) {
-        $postsQuery->where('event_category_id', $categoryId);
+        // dd($paginatedPosts->getCollection());
+
+        return $this->sendResponse('Following posts fetched', $paginatedPosts);
     }
-
-    if ($search) {
-        $postsQuery->whereHas('user', function ($q) use ($search) {
-            $q->where('first_name', 'like', "%{$search}%")
-              ->orWhere('last_name', 'like', "%{$search}%");
-        });
-    }
-
-    $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
-
-    // Add isFollow and is_likedto each post
-    $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
-    $post->isFollow = in_array($post->user_id, $followingIds);
-    $post->is_liked = $post->likes->contains('user_id', auth()->id());
-     $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
-    return $post;
-});
-
-    // dd($paginatedPosts->getCollection());
-
-    return $this->sendResponse('Following posts fetched', $paginatedPosts);
-}
 
 
 
@@ -523,64 +524,64 @@ public function followingPosts(Request $request)
     // }
 
     public function allPosts(Request $request)
-{
-    $user = auth()->user();
-    $categoryId = $request->query('category_id');
-    $search = $request->query('search');
-    $perPage = $request->get('per_page', 10); // Default 10 per page
+    {
+        $user = auth()->user();
+        $categoryId = $request->query('category_id');
+        $search = $request->query('search');
+        $perPage = $request->get('per_page', 10); // Default 10 per page
 
-    $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
+        $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
 
-    $query = Post::withCount(['likes', 'comments'])
-        ->with([
-            'user',
-            'tags',
-            'tags.user',
-            'likes',
-            'likes.user',
-            'comments' => function ($query) {
-                $query->withCount('replies')
-                    ->with(['user', 'likes.user', 'replies.user']);
-            },
-            'media'
-        ])
-    ->where('privacy', 'public')
-        ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-        ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()));
-    if ($categoryId) {
-        $query->where('event_category_id', $categoryId);
+        $query = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])
+            ->where('privacy', 'public')
+            ->whereHas('user', fn($q) => $q->where('is_active', 1))
+            ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()));
+        if ($categoryId) {
+            $query->where('event_category_id', $categoryId);
+        }
+        //search parameter fixed for searching for complete name
+        if ($search) {
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                    ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"]) // reverse order (optional)
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
+
+
+        $posts = $query->latest()->paginate($perPage);
+
+        $posts->getCollection()->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            return $post;
+        });
+
+        return $this->sendResponse('All public posts fetched', $posts);
     }
-    //search parameter fixed for searching for complete name
-    if ($search) {
-    $query->whereHas('user', function ($q) use ($search) {
-        $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
-          ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"]) // reverse order (optional)
-          ->orWhere('first_name', 'like', "%{$search}%")
-          ->orWhere('last_name', 'like', "%{$search}%");
-    });
-}
-
-
-    $posts = $query->latest()->paginate($perPage);
-
-  $posts->getCollection()->transform(function ($post) use ($followingIds) {
-    $post->isFollow = in_array($post->user_id, $followingIds);
-    $post->is_liked = $post->likes->contains('user_id', auth()->id());
-    return $post;
-});
-
-    return $this->sendResponse('All public posts fetched', $posts);
-}
 
 
     public function postDetails($id)
     {
-            $post = Post::withCount(['likes', 'comments'])
-        ->where('privacy', 'public')
-        ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-        ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
-        ->where('id', $id)
-        ->first();
+        $post = Post::withCount(['likes', 'comments'])
+            ->where('privacy', 'public')
+            ->whereHas('user', fn($q) => $q->where('is_active', 1))
+            ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()))
+            ->where('id', $id)
+            ->first();
 
 
         if (!$post) {
@@ -602,12 +603,14 @@ public function followingPosts(Request $request)
         ]);
 
         $post->is_liked = $post->likes->contains('user_id', auth()->id());
-           $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
+        $post->comments->transform(function ($comment) {
+            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+            return $comment;
+        });
 
-        return $this->sendResponse('Post details fetched', $post
+        return $this->sendResponse(
+            'Post details fetched',
+            $post
         );
     }
 
@@ -686,48 +689,48 @@ public function followingPosts(Request $request)
 //added the ability to search user by query params or ID
 // and returns the user object with followers and following counts
 // and public posts of that user with likes, comments, replies, media, and counts
-public function publicPostsWithFollowersFollowing(Request $request, $id)
-{
-    try {
-        $name = $request->query('first_name');
-        $email = $request->query('email');
-        $contactNo = $request->query('contact_no');
+    public function publicPostsWithFollowersFollowing(Request $request, $id)
+    {
+        try {
+            $name = $request->query('first_name');
+            $email = $request->query('email');
+            $contactNo = $request->query('contact_no');
 
-        $params = array_filter([
-            'first_name' => $name,
-            'email' => $email,
-            'contact_no' => $contactNo
-        ], fn($value) => $value !== null && $value !== '');
+            $params = array_filter([
+                'first_name' => $name,
+                'email' => $email,
+                'contact_no' => $contactNo
+            ], fn($value) => $value !== null && $value !== '');
 
-        if (!empty($params)) {
-            $user = User::where(function ($query) use ($params) {
-                foreach ($params as $key => $value) {
-                    $query->where($key, 'like', '%' . $value . '%');
+            if (!empty($params)) {
+                $user = User::where(function ($query) use ($params) {
+                    foreach ($params as $key => $value) {
+                        $query->where($key, 'like', '%' . $value . '%');
+                    }
+                })->first();
+
+                if (!$user) {
+                    return $this->sendError('User not found by provided params', [], 404);
                 }
-            })->first();
-
-            if (!$user) {
-                return $this->sendError('User not found by provided params', [], 404);
+            } else {
+                $user = User::find($id);
+                if (!$user) {
+                    return $this->sendError('User not found by id', [], 404);
+                }
             }
-        } else {
-            $user = User::find($id);
-            if (!$user) {
-                return $this->sendError('User not found by id', [], 404);
-            }
-        }
 
-        $user->loadCount(['posts', 'followers', 'following']);
+            $user->loadCount(['posts', 'followers', 'following']);
 
-        $isFollow = $user->followers()
-        ->where('follower_id', auth()->id())
-        ->exists();
+            $isFollow = $user->followers()
+                ->where('follower_id', auth()->id())
+                ->exists();
 
-        $followers = $user->followers()->with('follower')->get()->pluck('follower');
-        $following = $user->following()->with('following')->get()->pluck('following');
+            $followers = $user->followers()->with('follower')->get()->pluck('follower');
+            $following = $user->following()->with('following')->get()->pluck('following');
 
-        $perPage = $request->get('per_page', 10);
+            $perPage = $request->get('per_page', 10);
 
-        $publicPostsQuery = Post::with([
+            $publicPostsQuery = Post::with([
                 'likes.user',
                 'comments.user',
                 'comments.likes.user',
@@ -735,90 +738,90 @@ public function publicPostsWithFollowersFollowing(Request $request, $id)
                 'media',
                 'tags.user'
             ])
-            ->withCount(['likes', 'comments'])
-            ->where('privacy', 'public')
-            ->whereHas('user', fn ($q) => $q->where('is_active', 1))
-            ->where('user_id', $user->id)
-            ->whereDoesntHave('reports', fn ($q) => $q->where('user_id', auth()->id()))
-            ->latest();
+                ->withCount(['likes', 'comments'])
+                ->where('privacy', 'public')
+                ->whereHas('user', fn($q) => $q->where('is_active', 1))
+                ->where('user_id', $user->id)
+                ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()))
+                ->latest();
 
-        if ($perPage === 'all') {
-            $publicPosts = $publicPostsQuery->get();
+            if ($perPage === 'all') {
+                $publicPosts = $publicPostsQuery->get();
 
-            // Add is_liked flag
-            $publicPosts->transform(function ($post) {
-                $post->is_liked = $post->likes->contains('user_id', auth()->id());
-                  $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
-                return $post;
-            });
+                // Add is_liked flag
+                $publicPosts->transform(function ($post) {
+                    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                    $post->comments->transform(function ($comment) {
+                        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                        return $comment;
+                    });
+                    return $post;
+                });
 
-            return $this->sendResponse('Public posts with followers and following fetched', [
-                'user' => $user,
-                'is_follow' => $isFollow,
-                'followers' => $followers,
-                'followers_count' => $followers->count(),
-                'following' => $following,
-                'following_count' => $following->count(),
-                'post_count' => $user->posts_count,
-                'public_posts' => $publicPosts,
-            ]);
-        } else {
-            $perPage = is_numeric($perPage) ? (int) $perPage : 10;
-            $paginatedPosts = $publicPostsQuery->paginate($perPage);
+                return $this->sendResponse('Public posts with followers and following fetched', [
+                    'user' => $user,
+                    'is_follow' => $isFollow,
+                    'followers' => $followers,
+                    'followers_count' => $followers->count(),
+                    'following' => $following,
+                    'following_count' => $following->count(),
+                    'post_count' => $user->posts_count,
+                    'public_posts' => $publicPosts,
+                ]);
+            } else {
+                $perPage = is_numeric($perPage) ? (int) $perPage : 10;
+                $paginatedPosts = $publicPostsQuery->paginate($perPage);
 
-            // Add is_liked flag for paginated posts collection
-            $paginatedPosts->getCollection()->transform(function ($post) {
-                $post->is_liked = $post->likes->contains('user_id', auth()->id());
-                  $post->comments->transform(function ($comment) {
-        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-        return $comment;
-    });
-                return $post;
-            });
+                // Add is_liked flag for paginated posts collection
+                $paginatedPosts->getCollection()->transform(function ($post) {
+                    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                    $post->comments->transform(function ($comment) {
+                        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                        return $comment;
+                    });
+                    return $post;
+                });
 
-            $responseData = [
-    'user' => $user,
-    'is_follow' => $isFollow,
-    'followerss' => $followers,
-    'followers_counts' => $followers->count(),
-    'followings' => $following,
-    'following_counts' => $following->count(),
-    'post_count' => $user->posts_count,
-    'posts' => $paginatedPosts->items(),
-    'pagination' => [
-        'current_page' => $paginatedPosts->currentPage(),
-        'last_page' => $paginatedPosts->lastPage(),
-        'per_page' => $paginatedPosts->perPage(),
-        'total' => $paginatedPosts->total(),
-        'has_more_pages' => $paginatedPosts->hasMorePages(),
-    ],
-];
-            // dd($following->toArray());
+                $responseData = [
+                    'user' => $user,
+                    'is_follow' => $isFollow,
+                    'followerss' => $followers,
+                    'followers_counts' => $followers->count(),
+                    'followings' => $following,
+                    'following_counts' => $following->count(),
+                    'post_count' => $user->posts_count,
+                    'posts' => $paginatedPosts->items(),
+                    'pagination' => [
+                        'current_page' => $paginatedPosts->currentPage(),
+                        'last_page' => $paginatedPosts->lastPage(),
+                        'per_page' => $paginatedPosts->perPage(),
+                        'total' => $paginatedPosts->total(),
+                        'has_more_pages' => $paginatedPosts->hasMorePages(),
+                    ],
+                ];
+                // dd($following->toArray());
 
-            // return $this->sendResponse(
-            //     'Public posts with followers and following fetched',
-            //      [
-            //         'user' => $user,
-            //         'followerss' => $followers,
-            //         'followers_counts' => $followers->count(),
-            //         'followings' => $following,
-            //         'following_counts' => $following->count(),
-            //         'post_count' => $user->posts_count,
-            //         'pagination' => $paginatedPosts
-            //      ],
-            //     200,
+                // return $this->sendResponse(
+                //     'Public posts with followers and following fetched',
+                //      [
+                //         'user' => $user,
+                //         'followerss' => $followers,
+                //         'followers_counts' => $followers->count(),
+                //         'followings' => $following,
+                //         'following_counts' => $following->count(),
+                //         'post_count' => $user->posts_count,
+                //         'pagination' => $paginatedPosts
+                //      ],
+                //     200,
 
-            // );
+                // );
 
 
-            return $this->sendResponse('Public posts with followers and following fetched.', $responseData);
+                return $this->sendResponse('Public posts with followers and following fetched.', $responseData);
+            }
+        } catch (\Exception $e) {
+            return $this->sendError('Something went wrong', [$e->getMessage()], 500);
         }
-    } catch (\Exception $e) {
-        return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
-}
 
 }

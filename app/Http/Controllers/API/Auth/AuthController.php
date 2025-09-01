@@ -22,14 +22,14 @@ class AuthController extends Controller
     {
         //manual validation due to sendError custom method for error responses
         $validator = Validator::make($request->all(), [
-            'first_name'     => 'required|string',
-            'last_name'      => 'required|string',
-            'email'          => 'required|email|unique:users',
-            'contact_no'     => 'nullable|string|unique:users',
-            'profile_type'   => ['required', Rule::in(['private', 'public'])],
-            'dob'            => 'nullable|date',
-            'password'       => 'required|confirmed|min:6',
-            'profile_image'  => 'nullable|url',
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'email' => 'required|email|unique:users',
+            'contact_no' => 'nullable|string|unique:users',
+            'profile_type' => ['required', Rule::in(['private', 'public'])],
+            'dob' => 'nullable|date',
+            'password' => 'required|confirmed|min:6',
+            'profile_image' => 'nullable|url',
         ]);
 
         if ($validator->fails()) {
@@ -49,63 +49,63 @@ class AuthController extends Controller
         }
 
         $user = User::create([
-            'first_name'    => $request->first_name,
-            'last_name'     => $request->last_name,
-            'email'         => $request->email,
-            'contact_no'    => $request->contact_no,
-            'profile_type'  => $request->profile_type,
-            'dob'           => $request->dob,
-            'password'      => Hash::make($request->password),
-            'role'          => 'user',
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'email' => $request->email,
+            'contact_no' => $request->contact_no,
+            'profile_type' => $request->profile_type,
+            'dob' => $request->dob,
+            'password' => Hash::make($request->password),
+            'role' => 'user',
             'profile_image' => $request->profile_image,
-            'is_active'     => true,
+            'is_active' => true,
         ]);
 
         return $this->sendResponse('User registered successfully', [
             'token' => $user->createToken('API Token')->plainTextToken,
-            'user'  => $user
+            'user' => $user
         ], 201);
     }
 
-public function login(Request $request)
-{
-    $request->validate([
-        'email'    => 'required|email',
-        'password' => 'required',
-        'otp'      => 'nullable|string'
-    ]);
+    public function login(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+            'otp' => 'nullable|string'
+        ]);
 
-    $user = User::where('email', $request->email)->first();
+        $user = User::where('email', $request->email)->first();
 
-    if (!$user || !Hash::check($request->password, $user->password)) {
-        return $this->sendError('Invalid credentials', [], 401);
-    }
+        if (!$user || !Hash::check($request->password, $user->password)) {
+            return $this->sendError('Invalid credentials', [], 401);
+        }
 
-    // If user is inactive
-    if (!$user->is_active) {
-        $otp = rand(100000, 999999);
+        // If user is inactive
+        if (!$user->is_active) {
+            $otp = rand(100000, 999999);
 
-        UserOtp::updateOrCreate(
-            ['user_id' => $user->id],
-            ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
-        );
+            UserOtp::updateOrCreate(
+                ['user_id' => $user->id],
+                ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
+            );
 
-        return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
-            'otp' => $otp,
-            'token' => $user->createToken('API Token')->plainTextToken,
+            return $this->sendResponse('Account is deactivated. OTP sent to your email.', [
+                'otp' => $otp,
+                'token' => $user->createToken('API Token')->plainTextToken,
+                'user' => $user
+            ], 403);
+        }
+
+        // User is active: delete old tokens and login
+        $user->tokens()->delete();
+        $token = $user->createToken('API Token')->plainTextToken;
+
+        return $this->sendResponse('Login successful', [
+            'token' => $token,
             'user' => $user
-        ], 403);
+        ]);
     }
-
-    // User is active: delete old tokens and login
-    $user->tokens()->delete();
-    $token = $user->createToken('API Token')->plainTextToken;
-
-    return $this->sendResponse('Login successful', [
-        'token' => $token,
-        'user'  => $user
-    ]);
-}
 
 
 
@@ -123,11 +123,11 @@ public function login(Request $request)
         //added profile_type validation to ensure it is either 'private' or 'public'
 
         $validator = Validator::make($request->all(), [
-            'first_name'    => 'required|string',
-            'last_name'     => 'required|string',
-            'contact_no'    => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
-            'profile_type'  => ['required', Rule::in(['private', 'public'])],
-            'dob'           => 'nullable|date',
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'contact_no' => ['nullable', 'string', Rule::unique('users')->ignore($user->id)],
+            'profile_type' => ['required', Rule::in(['private', 'public'])],
+            'dob' => 'nullable|date',
             'profile_image' => 'nullable|url',
         ]);
 
@@ -139,50 +139,50 @@ public function login(Request $request)
 
         return $this->sendResponse('Profile updated', $user);
     }
-public function uploadImage(Request $request)
-{
-    $key = $request->input('key');
+    public function uploadImage(Request $request)
+    {
+        $key = $request->input('key');
 
-    // Dynamic validation rules based on 'key'
-    $rules = [
-        'key' => 'required|string|in:profile,cover,post,gallery,logo,video',
-    ];
+        // Dynamic validation rules based on 'key'
+        $rules = [
+            'key' => 'required|string|in:profile,cover,post,gallery,logo,video',
+        ];
 
-    if ($key === 'post') {
-        $rules['image'] = 'required|array';
-        $rules['image.*'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
-    } else {
-        $rules['image'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
-    }
-
-    $validator = Validator::make($request->all(), $rules);
-
-    if ($validator->fails()) {
-        return $this->sendError('Validation failed', $validator->errors(), 422);
-    }
-
-    $uploadedUrls = [];
-    $hasImage = false;
-    $hasVideo = false;
-
-    $files = ($key === 'post') ? $request->file('image') : [$request->file('image')];
-
-    foreach ($files as $file) {
-        $url = $this->uploadImageByKey($file, $key);
-        $uploadedUrls[] = $url;
-
-        $mime = $file->getMimeType();
-        if (str_starts_with($mime, 'image/')) {
-            $hasImage = true;
-        } elseif (str_starts_with($mime, 'video/')) {
-            $hasVideo = true;
+        if ($key === 'post') {
+            $rules['image'] = 'required|array';
+            $rules['image.*'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
+        } else {
+            $rules['image'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
         }
+
+        $validator = Validator::make($request->all(), $rules);
+
+        if ($validator->fails()) {
+            return $this->sendError('Validation failed', $validator->errors(), 422);
+        }
+
+        $uploadedUrls = [];
+        $hasImage = false;
+        $hasVideo = false;
+
+        $files = ($key === 'post') ? $request->file('image') : [$request->file('image')];
+
+        foreach ($files as $file) {
+            $url = $this->uploadImageByKey($file, $key);
+            $uploadedUrls[] = $url;
+
+            $mime = $file->getMimeType();
+            if (str_starts_with($mime, 'image/')) {
+                $hasImage = true;
+            } elseif (str_starts_with($mime, 'video/')) {
+                $hasVideo = true;
+            }
+        }
+
+        $message = 'Media uploaded successfully';
+
+        return $this->sendResponse($message, ['urls' => $uploadedUrls], 201);
     }
-
-    $message = 'Media uploaded successfully';
-
-    return $this->sendResponse($message, ['urls' => $uploadedUrls], 201);
-}
 
 
 
@@ -200,8 +200,8 @@ public function uploadImage(Request $request)
     public function changePassword(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'old_password'              => 'required',
-            'new_password'              => 'required|min:6',
+            'old_password' => 'required',
+            'new_password' => 'required|min:6',
             'new_password_confirmation' => 'required|same:new_password',
         ]);
 

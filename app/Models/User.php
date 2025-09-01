@@ -23,7 +23,7 @@ class User extends Authenticatable
         'password',
         'role',
         'is_active',
-            'dob',
+        'dob',
 
     ];
 
@@ -67,7 +67,7 @@ class User extends Authenticatable
         return $this->hasMany(Follow::class, 'following_id');
     }
 
-       public function following()
+    public function following()
     {
         return $this->hasMany(Follow::class, 'follower_id');
     }

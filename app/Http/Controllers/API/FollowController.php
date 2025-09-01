@@ -33,7 +33,7 @@ class FollowController extends Controller
         // Check if the user exists
         // If not, return an error response
 
-        if (! User::find($id)) {
+        if (!User::find($id)) {
             return $this->sendError('User not found', [], 404);
         }
         if (auth()->id() == $id) {
@@ -56,77 +56,77 @@ class FollowController extends Controller
         }
     }
 
- public function followers()
-{
-    $perPage = request()->get('per_page', 10);
-    $name = request()->get('name'); // name param
+    public function followers()
+    {
+        $perPage = request()->get('per_page', 10);
+        $name = request()->get('name'); // name param
 
-    $loggedInUser = auth()->user();
+        $loggedInUser = auth()->user();
 
-    // Base query for followers with eager loading
-    $query = $loggedInUser
-        ->followers()
-        ->with('follower');
+        // Base query for followers with eager loading
+        $query = $loggedInUser
+            ->followers()
+            ->with('follower');
 
-    // Agar name param hai to filter karo first_name OR last_name me
-    if ($name) {
-        $query->whereHas('follower', function ($q) use ($name) {
-            $q->where('first_name', 'like', "%{$name}%")
-              ->orWhere('last_name', 'like', "%{$name}%");
+        // Agar name param hai to filter karo first_name OR last_name me
+        if ($name) {
+            $query->whereHas('follower', function ($q) use ($name) {
+                $q->where('first_name', 'like', "%{$name}%")
+                    ->orWhere('last_name', 'like', "%{$name}%");
+            });
+        }
+
+        // Paginate query
+        $followers = $query->paginate($perPage);
+
+        // Get IDs of users the logged-in user is following
+        $followingIds = $loggedInUser->following()->pluck('following_id')->toArray();
+
+        // Mark each follower if followed by logged-in user
+        $followers->getCollection()->transform(function ($item) use ($followingIds) {
+            $followerUser = $item->follower;
+            $followerUser->is_followed = in_array($followerUser->id, $followingIds);
+            return $item;
         });
+
+        return $this->sendResponse('Followers fetched successfully', $followers);
     }
 
-    // Paginate query
-    $followers = $query->paginate($perPage);
 
-    // Get IDs of users the logged-in user is following
-    $followingIds = $loggedInUser->following()->pluck('following_id')->toArray();
+    public function following()
+    {
+        $perPage = request()->get('per_page', 10);
+        $name = request()->get('name'); // optional name filter
+        $loggedInUser = auth()->user();
 
-    // Mark each follower if followed by logged-in user
-    $followers->getCollection()->transform(function ($item) use ($followingIds) {
-        $followerUser = $item->follower;
-        $followerUser->is_followed = in_array($followerUser->id, $followingIds);
-        return $item;
-    });
+        // Base query for users you are following
+        $query = $loggedInUser
+            ->following()
+            ->with('following'); // eager load followed user
 
-    return $this->sendResponse('Followers fetched successfully', $followers);
-}
+        // Apply filter if name is provided
+        if ($name) {
+            $query->whereHas('following', function ($q) use ($name) {
+                $q->where('first_name', 'like', "%{$name}%")
+                    ->orWhere('last_name', 'like', "%{$name}%");
+            });
+        }
 
+        // Paginate results
+        $following = $query->paginate($perPage);
 
- public function following()
-{
-    $perPage = request()->get('per_page', 10);
-    $name = request()->get('name'); // optional name filter
-    $loggedInUser = auth()->user();
+        // Get IDs of users who follow the logged-in user
+        $followerIds = $loggedInUser->followers()->pluck('follower_id')->toArray();
 
-    // Base query for users you are following
-    $query = $loggedInUser
-        ->following()
-        ->with('following'); // eager load followed user
-
-    // Apply filter if name is provided
-    if ($name) {
-        $query->whereHas('following', function ($q) use ($name) {
-            $q->where('first_name', 'like', "%{$name}%")
-              ->orWhere('last_name', 'like', "%{$name}%");
+        // Check if followed users follow back
+        $following->getCollection()->transform(function ($item) use ($followerIds) {
+            $followingUser = $item->following;
+            $followingUser->is_followed_back = in_array($followingUser->id, $followerIds);
+            return $item;
         });
+
+        return $this->sendResponse('Following fetched successfully', $following);
     }
-
-    // Paginate results
-    $following = $query->paginate($perPage);
-
-    // Get IDs of users who follow the logged-in user
-    $followerIds = $loggedInUser->followers()->pluck('follower_id')->toArray();
-
-    // Check if followed users follow back
-    $following->getCollection()->transform(function ($item) use ($followerIds) {
-        $followingUser = $item->following;
-        $followingUser->is_followed_back = in_array($followingUser->id, $followerIds);
-        return $item;
-    });
-
-    return $this->sendResponse('Following fetched successfully', $following);
-}
 
 
 
@@ -137,52 +137,52 @@ class FollowController extends Controller
 
 
 
-public function myNetwork()
-{
-    $perPage = request()->get('per_page', 10);
-    $page = request()->get('page', 1);
+    public function myNetwork()
+    {
+        $perPage = request()->get('per_page', 10);
+        $page = request()->get('page', 1);
 
-    // Followers
-    $followersQuery = auth()->user()
-        ->followers()
-        ->with('follower');
+        // Followers
+        $followersQuery = auth()->user()
+            ->followers()
+            ->with('follower');
 
-    $followersTotal = $followersQuery->count();
-    $followers = $followersQuery
-        ->skip(($page - 1) * $perPage)
-        ->take($perPage)
-        ->get()
-        ->pluck('follower');
+        $followersTotal = $followersQuery->count();
+        $followers = $followersQuery
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get()
+            ->pluck('follower');
 
-    // Following
-    $followingQuery = auth()->user()
-        ->following()
-        ->with('following');
+        // Following
+        $followingQuery = auth()->user()
+            ->following()
+            ->with('following');
 
-    $followingTotal = $followingQuery->count();
-    $following = $followingQuery
-        ->skip(($page - 1) * $perPage)
-        ->take($perPage)
-        ->get()
-        ->pluck('following');
+        $followingTotal = $followingQuery->count();
+        $following = $followingQuery
+            ->skip(($page - 1) * $perPage)
+            ->take($perPage)
+            ->get()
+            ->pluck('following');
 
-    // Combine totals for shared pagination
-    $combinedTotal = max($followersTotal, $followingTotal); // Use max to reflect largest list
+        // Combine totals for shared pagination
+        $combinedTotal = max($followersTotal, $followingTotal); // Use max to reflect largest list
 
-    $pagination = [
-        'current_page'     => (int) $page,
-        'last_page'        => (int) ceil($combinedTotal / $perPage),
-        'per_page'         => (int) $perPage,
-        'total'            => (int) $combinedTotal,
-        'has_more_pages'   => $page < ceil($combinedTotal / $perPage),
-    ];
+        $pagination = [
+            'current_page' => (int) $page,
+            'last_page' => (int) ceil($combinedTotal / $perPage),
+            'per_page' => (int) $perPage,
+            'total' => (int) $combinedTotal,
+            'has_more_pages' => $page < ceil($combinedTotal / $perPage),
+        ];
 
-    return $this->sendResponse('Network fetched successfully', [
-        'followers'  => $followers,
-        'following'  => $following,
-        'pagination' => $pagination,
-    ]);
-}
+        return $this->sendResponse('Network fetched successfully', [
+            'followers' => $followers,
+            'following' => $following,
+            'pagination' => $pagination,
+        ]);
+    }
 
 
 }
