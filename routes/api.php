@@ -92,6 +92,9 @@ Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
 
 
     Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+    //Block/UnBlock route
+    Route::post('block',[AuthController::class,'block']);
+    Route::get('getBlockList', [AuthController::class,'viewBlockList']);
 });
 
 

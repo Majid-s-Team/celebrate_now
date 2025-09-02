@@ -71,5 +71,15 @@ class User extends Authenticatable
     {
         return $this->hasMany(Follow::class, 'follower_id');
     }
+    public function blockedUsers()
+{
+    return $this->hasMany(UserBlock::class, 'blocker_id');
+}
+
+public function blockers()
+{
+    return $this->hasMany(UserBlock::class, 'blocked_id');
+}
+
 
 }
