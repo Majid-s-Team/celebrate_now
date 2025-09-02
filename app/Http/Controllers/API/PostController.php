@@ -260,6 +260,7 @@ class PostController extends Controller
      */
     public function show($id)
     {
+
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
         $post = Post::withCount(['likes', 'comments'])
 
