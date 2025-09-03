@@ -17,6 +17,7 @@ class Post extends Model
         'photo',
         'event_category_id',
         'privacy',
+        'event_id',
 
     ];
 
@@ -58,6 +59,11 @@ class Post extends Model
 {
     return $this->hasMany(PostReport::class);
 }
+public function event()
+{
+    return $this->belongsTo(Event::class);
+}
+
 
 
 }

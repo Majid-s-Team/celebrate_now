@@ -20,6 +20,8 @@ use App\Http\Controllers\API\PostController;
 use App\Http\Controllers\API\CommentController;
 use App\Http\Controllers\API\FollowController;
 use App\Http\Controllers\API\EventCategoryController;
+use App\Http\Controllers\API\EventController;
+use App\Http\Controllers\API\PollController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -40,59 +42,83 @@ Route::prefix('auth')->group(function () {
 
 
 
-Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware('auth:sanctum')->group(function () {
 
 
-//    Route::post('/follow/{id}', [FollowController::class, 'follow']);
+        //    Route::post('/follow/{id}', [FollowController::class, 'follow']);
 //     Route::post('/unfollow/{id}', [FollowController::class, 'unfollow']);
-    Route::post('/follow-toggle/{id}', [FollowController::class, 'toggleFollow']);
+        Route::post('/follow-toggle/{id}', [FollowController::class, 'toggleFollow']);
 
-    Route::get('/followers', [FollowController::class, 'followers']);
-    Route::get('/following', [FollowController::class, 'following']);
-    Route::get('/my-network', [FollowController::class, 'myNetwork']);
+        Route::get('/followers', [FollowController::class, 'followers']);
+        Route::get('/following', [FollowController::class, 'following']);
+        Route::get('/my-network', [FollowController::class, 'myNetwork']);
 
-    // Event Category Routes
-    Route::apiResource('event-categories', EventCategoryController::class);
+        // Event Category Routes
+        Route::apiResource('event-categories', EventCategoryController::class);
 
- // Post Routes
-    Route::post('/posts', [PostController::class, 'store']);
-    Route::get('/posts', [PostController::class, 'myPosts']);
-    Route::get('/posts/{id}', [PostController::class, 'show']);
-    Route::put('/posts/{id}', [PostController::class, 'update']);
-    Route::delete('/posts/{id}', [PostController::class, 'destroy']);
-    Route::post('/posts/{id}/report', [PostController::class, 'report']);
-    Route::get('/reason', [PostController::class, 'reportReasons']);
-
-
-    // Route::post('/posts/{id}/like', [PostController::class, 'like']);
-    Route::post('/posts/{id}/like', [PostController::class, 'like']);
-    Route::get('/posts/{id}/liked-users', [PostController::class, 'likedUsers']);
-
-   // Show Posts of Users I Follow (Public + Their Private)
-    Route::get('/feed/following-posts', [PostController::class, 'followingPosts']);
-
-    // Show All Posts (with filters)
-    Route::get('/feed/all-posts', [PostController::class, 'allPosts']);
-
-    // Show Post with Comments + Likes + Replies + Tagged Users
-    Route::get('/posts/{id}/details', [PostController::class, 'postDetails']);
+        // Post Routes
+        Route::post('/posts', [PostController::class, 'store']);
+        Route::get('/posts', [PostController::class, 'myPosts']);
+        Route::get('/posts/{id}', [PostController::class, 'show']);
+        Route::put('/posts/{id}', [PostController::class, 'update']);
+        Route::delete('/posts/{id}', [PostController::class, 'destroy']);
+        Route::post('/posts/{id}/report', [PostController::class, 'report']);
+        Route::get('/reason', [PostController::class, 'reportReasons']);
 
 
-    Route::post('/posts/{id}/tag', [PostController::class, 'tagUsers']);
-    Route::get('/posts/{id}/with-counts', [PostController::class, 'publicPostsWithFollowersFollowing']);
+        // Route::post('/posts/{id}/like', [PostController::class, 'like']);
+        Route::post('/posts/{id}/like', [PostController::class, 'like']);
+        Route::get('/posts/{id}/liked-users', [PostController::class, 'likedUsers']);
 
-    // Comment Routes
-    Route::post('/posts/{id}/comment', [CommentController::class, 'store']);
-    Route::post('/comments/{id}/like', [CommentController::class, 'like']);
-    Route::get('/posts/{id}/comments', [CommentController::class, 'postComments']); // get comments for a post
+        // Show Posts of Users I Follow (Public + Their Private)
+        Route::get('/feed/following-posts', [PostController::class, 'followingPosts']);
 
-    // Reply Routes
+        // Show All Posts (with filters)
+        Route::get('/feed/all-posts', [PostController::class, 'allPosts']);
 
-Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
+        // Show Post with Comments + Likes + Replies + Tagged Users
+        Route::get('/posts/{id}/details', [PostController::class, 'postDetails']);
 
 
-    Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
-});
+        Route::post('/posts/{id}/tag', [PostController::class, 'tagUsers']);
+        Route::get('/posts/{id}/with-counts', [PostController::class, 'publicPostsWithFollowersFollowing']);
+
+        // Comment Routes
+        Route::post('/posts/{id}/comment', [CommentController::class, 'store']);
+        Route::post('/comments/{id}/like', [CommentController::class, 'like']);
+        Route::get('/posts/{id}/comments', [CommentController::class, 'postComments']); // get comments for a post
+
+        // Reply Routes
+
+        Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
+
+
+        Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+
+        Route::post('/events', [EventController::class, 'store']);
+        Route::get('/events/{id}', [EventController::class, 'show']);        
+        Route::put('/events/{id}', [EventController::class, 'update']);      
+        Route::get('/events', [EventController::class, 'index']);  
+        Route::get('/events/{id}', [EventController::class, 'show']);  
+        Route::delete('/events/{id}', [EventController::class, 'destroy']);
+
+        Route::get('/events/{id}/group-members-for-vote', [EventController::class, 'groupMembersForVote']);
+
+        Route::post('/polls/vote', [PollController::class, 'vote']);         
+        Route::post('/polls/create', [PollController::class, 'createPoll']);
+        Route::post('/polls/{pollId}/options/add', [PollController::class, 'addOption']);
+        Route::post('/polls/vote', [PollController::class, 'vote']);
+        Route::put('/polls/{pollId}', [PollController::class, 'updatePoll']); 
+        Route::delete('/polls/{pollId}', [PollController::class, 'deletePoll']);
+
+        Route::get('/polls/{id?}', [PollController::class, 'show']); 
+        Route::get('/events/{eventId}/polls/results', [PollController::class, 'eventPollResults']);
+        Route::get('/events/{eventId}/posts', [EventController::class, 'eventPosts']);
+
+
+
+    });
+    
 
 
 });
