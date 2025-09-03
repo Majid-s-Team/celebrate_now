@@ -81,4 +81,5 @@ class User extends Authenticatable
     {
         return $this->hasMany(UserBlock::class, 'blocked_id');
     }
+
 }
