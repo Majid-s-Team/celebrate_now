@@ -20,6 +20,7 @@ use App\Http\Controllers\API\PostController;
 use App\Http\Controllers\API\CommentController;
 use App\Http\Controllers\API\FollowController;
 use App\Http\Controllers\API\EventCategoryController;
+use App\Http\Controllers\API\PolicyController;
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -37,6 +38,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
     Route::post('verify-otp-account', [OTPController::class, 'verifyOtpToActivateAccount']);
+    //Policy Routes
+    Route::get('/policies', [PolicyController::class, 'index']);
 
 
 
@@ -92,6 +95,11 @@ Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
 
 
     Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+    //Block/UnBlock route
+    Route::post('block',[AuthController::class,'block']);
+    Route::get('getBlockList', [AuthController::class,'viewBlockList']);
+
+
 });
 
 

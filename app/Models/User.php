@@ -8,10 +8,12 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\ExcludeBlockedUsersScope;
+
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes,ExcludeBlockedUsersScope;
 
     protected $fillable = [
         'first_name',
@@ -24,13 +26,11 @@ class User extends Authenticatable
         'role',
         'is_active',
         'dob',
-
     ];
 
     protected $hidden = ['password', 'remember_token'];
 
     protected $casts = ['email_verified_at' => 'datetime'];
-
 
     public function posts()
     {
@@ -70,6 +70,16 @@ class User extends Authenticatable
     public function following()
     {
         return $this->hasMany(Follow::class, 'follower_id');
+    }
+
+    public function blockedUsers()
+    {
+        return $this->hasMany(UserBlock::class, 'blocker_id');
+    }
+
+    public function blockers()
+    {
+        return $this->hasMany(UserBlock::class, 'blocked_id');
     }
 
 }
