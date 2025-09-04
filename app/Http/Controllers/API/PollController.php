@@ -33,7 +33,6 @@ class PollController extends Controller
             return $this->sendError('Poll is closed', [], 400);
         }
 
-        // Member check
         $isMember = EventMember::where('event_id', $poll->event_id)
             ->where('user_id', $user->id)
             ->exists();
@@ -41,19 +40,18 @@ class PollController extends Controller
             return $this->sendError('Only event members can vote', [], 403);
         }
 
-        // Candidate IDs ko normalize karo
+
         $candidateIds = is_array($data['candidate_id'])
             ? $data['candidate_id']
             : [$data['candidate_id']];
 
-        // Single vs multiple selection check
+
         if (!$poll->allow_multiple_selection && count($candidateIds) > 1) {
             return $this->sendError('This poll allows only one selection', [], 400);
         }
 
         $votes = [];
         foreach ($candidateIds as $cid) {
-            // candidate valid hai ya nahi
             $isCandidate = PollCandidate::where('poll_id', $poll->id)
                 ->where('candidate_id', $cid)
                 ->exists();
@@ -62,18 +60,18 @@ class PollController extends Controller
                 return $this->sendError("Invalid candidate ID: {$cid}", [], 400);
             }
 
-            // check agar pehle se vote diya hua hai
+
             $existingVote = PollVote::where('poll_id', $poll->id)
                 ->where('voter_id', $user->id)
                 ->where('candidate_id', $cid)
                 ->first();
 
             if ($existingVote) {
-                // toggle: agar vote already hai to delete kar do
+
                 $existingVote->delete();
                 $votes[] = ['candidate_id' => $cid, 'status' => 'removed'];
             } else {
-                // naya vote create karo
+
                 $votes[] = PollVote::create([
                     'poll_id' => $poll->id,
                     'voter_id' => $user->id,
