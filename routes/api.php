@@ -24,6 +24,9 @@ use App\Http\Controllers\API\PolicyController;
 use App\Http\Controllers\API\EventController;
 use App\Http\Controllers\API\PollController;
 use App\Http\Controllers\API\CoinController;
+use App\Http\Controllers\API\WalletController;
+use App\Http\Controllers\API\TransactionController;
+
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
@@ -97,11 +100,11 @@ Route::prefix('auth')->group(function () {
         Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
 
 
-    Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
-    //Block/UnBlock route
-    Route::post('block',[AuthController::class,'block']);
-    Route::get('getBlockList', [AuthController::class,'viewBlockList']);
- Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+        Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+        //Block/UnBlock route
+        Route::post('block', [AuthController::class, 'block']);
+        Route::get('getBlockList', [AuthController::class, 'viewBlockList']);
+        Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
 
         Route::post('/events', [EventController::class, 'store']);
         Route::get('/events/{id}', [EventController::class, 'show']);
@@ -123,27 +126,26 @@ Route::prefix('auth')->group(function () {
         Route::get('/events/{eventId}/polls/results', [PollController::class, 'eventPollResults']);
         Route::get('/events/{eventId}/posts', [EventController::class, 'eventPosts']);
 
-         Route::get('/coins/packages', [CoinController::class, 'listPackages']);
-    Route::post('/coins/packages', [CoinController::class, 'createPackage']);   // admin (optional)
-    Route::put('/coins/packages/{id}', [CoinController::class, 'updatePackage']); // admin (optional)
-    Route::delete('/coins/packages/{id}', [CoinController::class, 'deletePackage']); // admin (optional)
+        Route::get('/coins/packages', [CoinController::class, 'listPackages']);
+        Route::post('/coins/packages', [CoinController::class, 'createPackage']);
+        Route::put('/coins/packages/{id}', [CoinController::class, 'updatePackage']);
+        Route::delete('/coins/packages/{id}', [CoinController::class, 'deletePackage']);
+        Route::get('/coins/wallet', [WalletController::class, 'myWallet']);
 
-    // Wallet
-    Route::get('/coins/wallet', [CoinController::class, 'myWallet']);
 
-    // Actions
-    Route::post('/coins/purchase', [CoinController::class, 'purchase']); // via package
-    Route::post('/coins/send', [CoinController::class, 'send']);         // direct / post / event
-    Route::post('/coins/spend', [CoinController::class, 'spend']);       // platform spend
+        Route::post('/coins/purchase', [CoinController::class, 'purchase']);
+        Route::post('/coins/send', [TransactionController::class, 'send']);
+        Route::post('/coins/spend', [TransactionController::class, 'spend']);
 
-    // History
-    Route::get('/coins/transactions', [CoinController::class, 'myTransactions']);
+        Route::get('/coins/transactions', [TransactionController::class, 'myTransactions']);
+         Route::get('/with-dsonations', [WalletController::class, 'listWithDonations']);
 
+
+
+
+    });
 
 
 });
-       
-
-    });
 
 
