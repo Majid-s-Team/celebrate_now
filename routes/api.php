@@ -20,6 +20,7 @@ use App\Http\Controllers\API\PostController;
 use App\Http\Controllers\API\CommentController;
 use App\Http\Controllers\API\FollowController;
 use App\Http\Controllers\API\EventCategoryController;
+use App\Http\Controllers\API\PolicyController;
 use App\Http\Controllers\API\EventController;
 use App\Http\Controllers\API\PollController;
 use App\Http\Controllers\API\CoinController;
@@ -40,6 +41,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
     Route::post('verify-otp-account', [OTPController::class, 'verifyOtpToActivateAccount']);
+    //Policy Routes
+    Route::get('/policies', [PolicyController::class, 'index']);
 
 
 
@@ -94,25 +97,32 @@ Route::prefix('auth')->group(function () {
         Route::post('/replies/{id}/like', [CommentController::class, 'likeReply']);
 
 
+    Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+    //Block/UnBlock route
+    Route::post('block',[AuthController::class,'block']);
+    Route::get('getBlockList', [AuthController::class,'viewBlockList']);
+
+
+});
         Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
 
         Route::post('/events', [EventController::class, 'store']);
-        Route::get('/events/{id}', [EventController::class, 'show']);        
-        Route::put('/events/{id}', [EventController::class, 'update']);      
-        Route::get('/events', [EventController::class, 'index']);  
-        Route::get('/events/{id}', [EventController::class, 'show']);  
+        Route::get('/events/{id}', [EventController::class, 'show']);
+        Route::put('/events/{id}', [EventController::class, 'update']);
+        Route::get('/events', [EventController::class, 'index']);
+        Route::get('/events/{id}', [EventController::class, 'show']);
         Route::delete('/events/{id}', [EventController::class, 'destroy']);
 
         Route::get('/events/{id}/group-members-for-vote', [EventController::class, 'groupMembersForVote']);
 
-        Route::post('/polls/vote', [PollController::class, 'vote']);         
+        Route::post('/polls/vote', [PollController::class, 'vote']);
         Route::post('/polls/create', [PollController::class, 'createPoll']);
         Route::post('/polls/{pollId}/options/add', [PollController::class, 'addOption']);
         Route::post('/polls/vote', [PollController::class, 'vote']);
-        Route::put('/polls/{pollId}', [PollController::class, 'updatePoll']); 
+        Route::put('/polls/{pollId}', [PollController::class, 'updatePoll']);
         Route::delete('/polls/{pollId}', [PollController::class, 'deletePoll']);
 
-        Route::get('/polls/{id?}', [PollController::class, 'show']); 
+        Route::get('/polls/{id?}', [PollController::class, 'show']);
         Route::get('/events/{eventId}/polls/results', [PollController::class, 'eventPollResults']);
         Route::get('/events/{eventId}/posts', [EventController::class, 'eventPosts']);
 
@@ -135,7 +145,5 @@ Route::prefix('auth')->group(function () {
 
 
     });
-    
 
 
-});
