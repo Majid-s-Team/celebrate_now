@@ -101,10 +101,7 @@ Route::prefix('auth')->group(function () {
     //Block/UnBlock route
     Route::post('block',[AuthController::class,'block']);
     Route::get('getBlockList', [AuthController::class,'viewBlockList']);
-
-
-});
-        Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
+ Route::post('/comments/{id}/reply', [CommentController::class, 'reply']);
 
         Route::post('/events', [EventController::class, 'store']);
         Route::get('/events/{id}', [EventController::class, 'show']);
@@ -143,6 +140,9 @@ Route::prefix('auth')->group(function () {
     Route::get('/coins/transactions', [CoinController::class, 'myTransactions']);
 
 
+
+});
+       
 
     });
 
