@@ -8,7 +8,9 @@ use Illuminate\Http\Request;
 use App\Models\Post;
 use App\Models\PostLike;
 use App\Models\PostTag;
+use App\Models\Event;
 use App\Models\Comment;
+use App\Models\EventMember;
 use App\Models\CommentLike;
 use App\Models\Reply;
 use App\Models\Follow;
@@ -29,6 +31,7 @@ class PostController extends Controller
                 $q->where('is_active', 1);
             })
             ->whereNull('deleted_at')
+            ->whereNull('event_id')
             ->whereDoesntHave('reports', function ($q) {
                 $q->where('user_id', auth()->id());
             })
@@ -57,8 +60,10 @@ class PostController extends Controller
             'photos.*.url' => 'required|string',
             'photos.*.type' => 'required|in:image,video',
 
-            'event_category_id' => 'nullable|exists:event_categories,id',
-            'privacy' => 'required|in:public,private',
+            'event_category_id' => 'required_if:event_id,null|exists:event_categories,id',
+            'privacy' => 'required_if:event_id,null|in:public,private',
+            'event_id' => 'nullable|exists:events,id',
+
             'tag_user_ids' => 'nullable|array',
             'tag_user_ids.*' => 'exists:users,id'
         ]);
@@ -67,12 +72,33 @@ class PostController extends Controller
             return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
 
+        $eventCategoryId = $request->event_category_id;
+        $privacy = $request->privacy;
+
+        if ($request->event_id) {
+            $event = Event::findOrFail($request->event_id);
+
+            $isHostOrCohost = EventMember::where('event_id', $request->event_id)
+                ->where('user_id', auth()->id())
+                ->where('status', 'joined')
+                ->whereIn('role', ['host', 'cohost'])
+                ->exists();
+
+            if (!$isHostOrCohost) {
+                return $this->sendError('Only host or cohost can post in this event.', [], 403);
+            }
+
+            $eventCategoryId = $event->event_type_id;
+            $privacy = 'private';
+        }
+
         $post = Post::create([
             'user_id' => auth()->id(),
             'caption' => $request->caption,
             'photo' => null,
-            'event_category_id' => $request->event_category_id,
-            'privacy' => $request->privacy
+            'event_category_id' => $eventCategoryId,
+            'privacy' => $privacy,
+            'event_id' => $request->event_id,
         ]);
 
         if ($request->has('tag_user_ids')) {
@@ -94,6 +120,8 @@ class PostController extends Controller
         return $this->sendResponse('Post created successfully', $post->load('media'), 201);
     }
 
+
+
     public function update(Request $request, $id)
     {
         $post = Post::with(['media', 'tags'])->findOrFail($id);
@@ -104,26 +132,50 @@ class PostController extends Controller
 
         $validator = Validator::make($request->all(), [
             'caption' => 'nullable|string',
-            'privacy' => 'nullable|in:public,private',
-            'event_category_id' => 'nullable|exists:event_categories,id',
-            'tag_user_ids' => 'nullable|array',
-            'tag_user_ids.*' => 'exists:users,id',
             'photos' => 'nullable|array',
             'photos.*.url' => 'required|string',
             'photos.*.type' => 'required|in:image,video',
+
+            'event_category_id' => 'required_if:event_id,null|exists:event_categories,id',
+            'privacy' => 'required_if:event_id,null|in:public,private',
+            'event_id' => 'nullable|exists:events,id',
+
+            'tag_user_ids' => 'nullable|array',
+            'tag_user_ids.*' => 'exists:users,id',
         ]);
 
         if ($validator->fails()) {
             return $this->sendError('Validation Error', $validator->errors()->all(), 422);
         }
 
+        $eventCategoryId = $request->event_category_id;
+        $privacy = $request->privacy;
+
+        if ($request->event_id) {
+            $event = Event::findOrFail($request->event_id);
+
+            $isHostOrCohost = EventMember::where('event_id', $request->event_id)
+                ->where('user_id', auth()->id())
+                ->where('status', 'joined')
+                ->whereIn('role', ['host', 'cohost'])
+                ->exists();
+
+            if (!$isHostOrCohost) {
+                return $this->sendError('Only host or cohost can post in this event.', [], 403);
+            }
+
+            $eventCategoryId = $event->event_type_id;
+            $privacy = 'private';
+        }
+
+
         $post->update([
             'caption' => $request->caption,
-            'privacy' => $request->privacy,
-            'event_category_id' => $request->event_category_id,
+            'privacy' => $privacy,
+            'event_category_id' => $eventCategoryId,
+            'event_id' => $request->event_id,
         ]);
 
-        // Sync tag users
         if ($request->has('tag_user_ids')) {
             PostTag::where('post_id', $post->id)->delete();
             foreach ($request->tag_user_ids as $userId) {
@@ -134,7 +186,7 @@ class PostController extends Controller
             }
         }
 
-        // Update photos - delete old, insert new
+
         if ($request->has('photos')) {
             PostMedia::where('post_id', $post->id)->delete();
             foreach ($request->photos as $media) {
@@ -203,61 +255,7 @@ class PostController extends Controller
     }
 
 
-    // public function store(Request $request)
 
-    // {
-
-    //     // dd(auth()->id(), auth()->user());
-
-    //     //manual validation due to sendError custom method for error responses
-    //     $validator = Validator::make($request->all(), [
-    //         'caption' => 'nullable|string',
-    //         'photo' => 'nullable|string',
-    //         'event_category_id' => 'nullable|exists:event_categories,id',
-    //         'privacy' => 'required|in:public,private',
-    //         'tag_user_ids' => 'nullable|array',
-    //         'tag_user_ids.*' => 'exists:users,id'
-    //     ]);
-
-    //     if ($validator->fails()) {
-    //         return $this->sendError('Validation Error', $validator->errors()->all(), 422);
-    //     }
-
-    //     // $request->validate([
-    //     //     'caption' => 'nullable|string',
-    //     //     'photo' => 'nullable|string',
-    //     //     'event_category_id' => 'nullable|exists:event_categories,id',
-    //     //     'privacy' => 'required|in:public,private',
-    //     //     'tag_user_ids' => 'nullable|array',
-    //     //     'tag_user_ids.*' => 'exists:users,id'
-    //     // ]);
-
-    //     $post = Post::create([
-    //         'user_id' => auth()->id(),
-    //         'caption' => $request->caption,
-    //         'photo' => $request->photo,
-    //         'event_category_id' => $request->event_category_id,
-    //         'privacy' => $request->privacy
-    //     ]);
-
-    //     if ($request->has('tag_user_ids')) {
-    //         foreach ($request->tag_user_ids as $userId) {
-    //             PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
-    //         }
-    //     }
-
-    //     // return response()->json($post);
-    //     return $this->sendResponse('Post created successfully', $post, 201);
-
-
-    // }
-
-    /**
-     * Display the specified resource.
-     * fucntion work :
-     * busniess lo
-
-     */
     public function show($id)
     {
 
@@ -291,44 +289,38 @@ class PostController extends Controller
         return $this->sendResponse('Post fetched successfully', $post);
     }
 
-    // public function like($id) {
-    //     PostLike::firstOrCreate(['user_id' => auth()->id(), 'post_id' => $id]);
-    //     return response()->json(['message' => 'Post liked']);
-    // }
+
 
     public function like($id)
     {
 
-        // Yeh line check karti hai ke current user ne is post ko like kiya hai ya nahi
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
 
-        // Agar post nahi milta to error return karte hain
+
         $post = Post::find($id);
         if (!$post) {
             return $this->sendError('Post not found', [], 404);
         }
         if ($like) {
             $like->delete();
-            // return response()->json(['message' => 'Unliked']);
             return $this->sendResponse('Post unliked');
 
         } else {
             PostLike::create(['user_id' => auth()->id(), 'post_id' => $id]);
-            // return response()->json(['message' => 'Liked']);
+
             return $this->sendResponse('Post Liked');
 
         }
     }
 
 
-    //new taguser function in order to use sendError custom method for error responses and also returns error if post not found
     public function tagUsers(Request $request, $id)
     {
         $post = Post::find($id);
         if (!$post) {
             return $this->sendError('No Record Found', 'Post id : ' . $id . ' not found', 404);
         }
-        //manual validation due to sendError custom method for error responses
+
         $validator = Validator::make($request->all(), [
             'user_ids' => 'required|array',
             'user_ids.*' => 'exists:users,id'
@@ -348,11 +340,10 @@ class PostController extends Controller
 
     public function likedUsers($id)
     {
-        // return PostLike::with('user')->where('post_id', $id)->get();
+
         $users = PostLike::with('user')->where('post_id', $id)->get();
         return $this->sendResponse('Liked users fetched', $users);
     }
-    // modified to return the user object as well
     public function myPosts(Request $request)
     {
         $user = auth()->user();
@@ -637,7 +628,6 @@ public function allPosts(Request $request)
             return $this->sendError('Post not found', [], 404);
         }
 
-        // Reload with full relationships including reply/user/likes nesting
         $post->load([
             'user',
             'tags',
@@ -645,8 +635,8 @@ public function allPosts(Request $request)
             'likes',
             'likes.user',
             'comments' => function ($query) {
-                $query->withCount('replies') // count replies per comment
-                    ->with(['user', 'likes.user', 'replies.user']); // eager load nested stuff
+                $query->withCount('replies')
+                    ->with(['user', 'likes.user', 'replies.user']);
             },
             'media'
         ]);
@@ -663,81 +653,6 @@ public function allPosts(Request $request)
         );
     }
 
-    // not using this as all returns should be similar
-// private function formatPostWithCounts($post)
-// {
-//     return [
-//         'id' => $post->id,
-//         'user' => $post->user,
-//         'caption' => $post->caption,
-//         'photo' => $post->photo,
-//         'privacy' => $post->privacy,
-//         'event_category' => $post->category?->name,
-//         'tagged_users' => $post->tags->pluck('user'),
-//         'likes_count' => $post->likes->count(),
-//         'comments_count' => $post->comments->count(),
-//         'comments' => $post->comments->map(function ($comment) {
-//             return [
-//                 'id' => $comment->id,
-//                 'body' => $comment->body,
-//                 'user' => $comment->user,
-//                 'likes_count' => $comment->likes->count(),
-//                 'replies_count' => $comment->replies->count(),
-//                 'replies' => $comment->replies->map(function ($reply) {
-//                     return [
-//                         'id' => $reply->id,
-//                         'body' => $reply->body,
-//                         'user' => $reply->user,
-//                         'emojis' => $reply->emojis
-//                     ];
-//                 }),
-//             ];
-//         })
-//     ];
-// }
-
-    // new function to acutally count the posts as well
-
-    // private function formatPostCount($post)
-// {
-//     return [
-//         'id' => $post->id,
-//         'user' => $post->user,
-//         'caption' => $post->caption,
-//         'photo' => $post->photo,
-//         'privacy' => $post->privacy,
-//         'event_category' => $post->category?->name,
-//         'tagged_users' => $post->tags->pluck('user'),
-//         'post_count' => $post->count(),
-//         'likes_count' => $post->likes->count(),
-//         'comments_count' => $post->comments->count(),
-//         'comments' => $post->comments->map(function ($comment) {
-//             return [
-//                 'id' => $comment->id,
-//                 'body' => $comment->body,
-//                 'user' => $comment->user,
-//                 'likes_count' => $comment->likes->count(),
-//                 'replies_count' => $comment->replies->count(),
-//                 'replies' => $comment->replies->map(function ($reply) {
-//                     return [
-//                         'id' => $reply->id,
-//                         'body' => $reply->body,
-//                         'user' => $reply->user,
-//                         'emojis' => $reply->emojis
-//                     ];
-//                 }),
-//             ];
-//         })
-//     ];
-// }
-
-
-
-    // returns public posts of a user with followers and following
-// this function is used in the api route /posts/{id}/with-counts
-//added the ability to search user by query params or ID
-// and returns the user object with followers and following counts
-// and public posts of that user with likes, comments, replies, media, and counts
     public function publicPostsWithFollowersFollowing(Request $request, $id)
     {
         try {
@@ -821,7 +736,6 @@ public function allPosts(Request $request)
                 $perPage = is_numeric($perPage) ? (int) $perPage : 10;
                 $paginatedPosts = $publicPostsQuery->paginate($perPage);
 
-                // Add is_liked flag for paginated posts collection
                 $paginatedPosts->getCollection()->transform(function ($post) {
                     $post->is_liked = $post->likes->contains('user_id', auth()->id());
                     $post->comments->transform(function ($comment) {
@@ -848,24 +762,6 @@ public function allPosts(Request $request)
                         'has_more_pages' => $paginatedPosts->hasMorePages(),
                     ],
                 ];
-                // dd($following->toArray());
-
-                // return $this->sendResponse(
-                //     'Public posts with followers and following fetched',
-                //      [
-                //         'user' => $user,
-                //         'followerss' => $followers,
-                //         'followers_counts' => $followers->count(),
-                //         'followings' => $following,
-                //         'following_counts' => $following->count(),
-                //         'post_count' => $user->posts_count,
-                //         'pagination' => $paginatedPosts
-                //      ],
-                //     200,
-
-                // );
-
-
                 return $this->sendResponse('Public posts with followers and following fetched.', $responseData);
             }
         } catch (\Exception $e) {
