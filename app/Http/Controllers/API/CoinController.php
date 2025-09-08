@@ -7,6 +7,7 @@ use App\Models\CoinPackage;
 use App\Models\CoinTransaction;
 use App\Models\Event;
 use App\Models\Post;
+use App\Models\Card;
 use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
@@ -74,41 +75,67 @@ class CoinController extends Controller
 
     public function purchase(Request $request)
     {
-        $data = $request->validate([
-            'coin_package_id' => ['required', 'exists:coin_packages,id'],
-        ]);
+        try {
+            $data = $request->validate([
+                'coin_package_id' => ['required', 'exists:coin_packages,id'],
+                'card_id' => ['required', 'exists:cards,id'],
+            ]);
 
-        $user = auth()->user();
-        $package = CoinPackage::findOrFail($data['coin_package_id']);
+            $user = auth()->user();
 
-        DB::transaction(function () use ($user, $package) {
+            $card = Card::where('id', $data['card_id'])
+                ->where('user_id', $user->id)
+                ->first();
 
-            $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
-            if (!$wallet) {
-                $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
-
-                $wallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
+            if (!$card) {
+                return $this->sendError('Card not found or does not belong to you', [], 404);
             }
 
+            $package = CoinPackage::find($data['coin_package_id']);
+            if (!$package) {
+                return $this->sendError('Coin package not found', [], 404);
+            }
 
-            $wallet->balance = (int) $wallet->balance + (int) $package->coins;
-            $wallet->save();
+            DB::beginTransaction();
 
+            try {
+                $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
+                if (!$wallet) {
+                    $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
+                    $wallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
+                }
 
-            CoinTransaction::create([
-                'sender_id' => null,
-                'receiver_id' => $user->id,
-                'coin_package_id' => $package->id,
-                'post_id' => null,
-                'event_id' => null,
-                'coins' => $package->coins,
-                'type' => 'purchase',
-                'message' => 'Package purchase: ' . $package->coins . ' coins',
-            ]);
-        });
+                $wallet->balance = (int) $wallet->balance + (int) $package->coins;
+                $wallet->save();
 
-        return response()->json(['message' => 'Coins purchased successfully']);
+                CoinTransaction::create([
+                    'sender_id' => null,
+                    'receiver_id' => $user->id,
+                    'coin_package_id' => $package->id,
+                    'post_id' => null,
+                    'event_id' => null,
+                    'coins' => $package->coins,
+                    'type' => 'purchase',
+                    'message' => 'Purchased ' . $package->coins . ' coins using card #' . $card->id,
+                ]);
+
+                DB::commit();
+
+                return $this->sendResponse('Coins purchased successfully', [
+                    'wallet_balance' => $wallet->balance,
+                    'package' => $package->only(['id', 'name', 'coins', 'price']),
+                ]);
+            } catch (\Exception $e) {
+                DB::rollBack();
+                return $this->sendError('Purchase failed', ['error' => $e->getMessage()], 500);
+            }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $this->sendError('Validation Error', $e->errors(), 422);
+        } catch (\Exception $e) {
+            return $this->sendError('Something went wrong', ['error' => $e->getMessage()], 500);
+        }
     }
+
 
 
 

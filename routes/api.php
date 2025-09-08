@@ -26,6 +26,7 @@ use App\Http\Controllers\API\PollController;
 use App\Http\Controllers\API\CoinController;
 use App\Http\Controllers\API\WalletController;
 use App\Http\Controllers\API\TransactionController;
+use App\Http\Controllers\API\CardController;
 
 
 Route::prefix('auth')->group(function () {
@@ -136,11 +137,17 @@ Route::prefix('auth')->group(function () {
 
         Route::post('/coins/purchase', [CoinController::class, 'purchase']);
         Route::post('/coins/send', [TransactionController::class, 'send']);
-        Route::post('/coins/spend', [TransactionController::class, 'spend']);
+        // Route::post('/coins/spend', [TransactionController::class, 'spend']);
         Route::get('/gifts', [TransactionController::class, 'gifts']);
 
+        Route::get('cards', [CardController::class, 'index']);
+        Route::post('cards', [CardController::class, 'store']);
+        Route::put('cards/{id}', [CardController::class, 'update']);
+        Route::delete('cards/{id}', [CardController::class, 'destroy']);
+
+        Route::post('coins/purchase', [CoinController::class, 'purchase']);
         Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);
-         Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
+        Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
 
 
 
