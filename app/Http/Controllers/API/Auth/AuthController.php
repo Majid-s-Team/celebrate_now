@@ -263,9 +263,24 @@ class AuthController extends Controller
 
     }
 
-    public function viewBlockList(){
-        $user = auth()->user();
-        $userBlocks = UserBlock::where('blocker_id',$user->id)->get();
-        return $this->sendResponse('User Blocked List', [$userBlocks], 200);
-    }
+  public function viewBlockList(Request $request)
+{
+    $user = auth()->user();
+    $search = $request->get('search');
+
+    $userBlocks = UserBlock::with('blocked')
+        ->where('blocker_id', $user->id)
+        ->when($search, function ($query) use ($search) {
+            $query->whereHas('blocked', function ($q) use ($search) {
+                $q->where(function ($q2) use ($search) {
+                    $q2->where('first_name', 'like', "%{$search}%")
+                        ->orWhere('last_name', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%");
+                });
+            });
+        })
+        ->get();
+
+    return $this->sendResponse('User Blocked List', $userBlocks, 200);
+}
 }

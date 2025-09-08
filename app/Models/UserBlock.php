@@ -18,7 +18,7 @@ class UserBlock extends Model
      */
     public function blocker()
     {
-        return $this->belongsTo(User::class, 'blocker_id');
+        return $this->belongsTo(User::class, 'blocker_id')->withoutGlobalScopes();
     }
 
     /**
@@ -26,6 +26,6 @@ class UserBlock extends Model
      */
     public function blocked()
     {
-        return $this->belongsTo(User::class, 'blocked_id');
+        return $this->belongsTo(User::class, 'blocked_id')->withoutGlobalScopes();
     }
 }

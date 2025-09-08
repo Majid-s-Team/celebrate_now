@@ -96,5 +96,11 @@ public function receivedTransactions()
     {
         return $this->hasMany(UserBlock::class, 'blocked_id');
     }
+    public function conversations()
+{
+    return $this->hasMany(Conversation::class, 'user_one')
+        ->orWhere('user_two', $this->id);
+}
+
 
 }

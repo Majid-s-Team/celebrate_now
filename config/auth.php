@@ -18,6 +18,7 @@ return [
         'passwords' => 'users',
     ],
 
+
     /*
     |--------------------------------------------------------------------------
     | Authentication Guards
@@ -40,6 +41,11 @@ return [
             'driver' => 'session',
             'provider' => 'users',
         ],
+         'api' => [
+        'driver' => 'sanctum', // or 'sanctum' if you're using Laravel Sanctum
+        'provider' => 'users',
+        // 'hash' => false, // optional
+    ],
     ],
 
     /*

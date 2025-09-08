@@ -28,6 +28,7 @@ use App\Http\Controllers\API\WalletController;
 use App\Http\Controllers\API\TransactionController;
 use App\Http\Controllers\API\CardController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\Api\ChatController;
 
 
 Route::prefix('auth')->group(function () {
@@ -53,9 +54,6 @@ Route::prefix('auth')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
 
-
-        //    Route::post('/follow/{id}', [FollowController::class, 'follow']);
-//     Route::post('/unfollow/{id}', [FollowController::class, 'unfollow']);
         Route::post('/follow-toggle/{id}', [FollowController::class, 'toggleFollow']);
 
         Route::get('/followers', [FollowController::class, 'followers']);
@@ -157,13 +155,22 @@ Route::prefix('auth')->group(function () {
         Route::post('coins/purchase', [CoinController::class, 'purchase']);
         Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);
         Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
+    // History
+    Route::get('/coins/transactions', [TransactionController::class, 'myTransactions']);
+
+    //Chat
+    Route::post('/chat/start/{receiverId}', [ChatController::class, 'startConversation']);
+    Route::post('/chat/send', [ChatController::class, 'sendMessage']);
+    Route::get('/chat/messages/{conversationId}', [ChatController::class, 'getMessages']);
+    Route::post('/chat/seen/{conversationId}', [ChatController::class, 'markAsSeen']);
 
 
+
+});
 
 
     });
 
 
-});
 
 

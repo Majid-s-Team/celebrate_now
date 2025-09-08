@@ -10,6 +10,7 @@ use App\Models\EventMember;
 use App\Models\Poll;
 use App\Models\Post;
 use App\Models\PollCandidate;
+use App\Models\UserBlock;
 use Illuminate\Validation\Rule;
 
 class EventController extends Controller
@@ -153,12 +154,34 @@ class EventController extends Controller
     // Show single event
     public function show($id)
     {
-        $event = Event::with([
-            'creator:id,first_name,last_name,email,profile_image',
-            'category',
-            'members.user:id,first_name,last_name,profile_image',
-            'polls.candidates.candidate:id,first_name,last_name,profile_image',
-            'polls.votes'
+     $user = auth()->user();
+
+     $blockedUserIds = UserBlock::where('blocker_id', $user->id)
+    ->pluck('blocked_id')
+    ->toArray();
+
+     $event = Event::with([
+        'creator:id,first_name,last_name,email,profile_image',
+       'category',
+        'members' => function ($query) use ($blockedUserIds) {
+        $query->whereHas('user', function ($q) use ($blockedUserIds) {
+            $q->whereNotIn('id', $blockedUserIds);
+        });
+    },
+    'members.user' => function ($query) use ($blockedUserIds) {
+        $query->select('id', 'first_name', 'last_name', 'profile_image')
+              ->whereNotIn('id', $blockedUserIds);
+    },
+    'polls.candidates' => function ($query) use ($blockedUserIds) {
+        $query->whereHas('candidate', function ($q) use ($blockedUserIds) {
+            $q->whereNotIn('id', $blockedUserIds);
+        });
+    },
+    'polls.candidates.candidate' => function ($query) use ($blockedUserIds) {
+        $query->select('id', 'first_name', 'last_name', 'profile_image')
+              ->whereNotIn('id', $blockedUserIds);
+    },
+        'polls.votes'
         ])->find($id);
 
         if (!$event) {
@@ -200,26 +223,27 @@ class EventController extends Controller
             'poll_date' => 'nullable|date',
             'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
             'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
-            'donation_deadline' => 'nullable|date|after:date',
-        ]);
+            'donation_deadline' => 'nullable|date|after:date']);
+
+
 
         DB::beginTransaction();
         try {
             $event->update(array_filter($data, fn($value) => !is_null($value)));
 
+            // if ($event->funding_type === 'donation_based') {
+            //     $event->donation_goal = $data['donation_goal'];
+            //     dd($data['contribution_from_members']);
+            //     $event->contribution_from_members = $data['contribution_from_members'];
+            //     $event->donation_deadline = $data['donation_deadline'] ?? null;
+            //     $event->save();
+            // } else {
 
-            if ($event->funding_type === 'donation_based') {
-                $event->donation_goal = $data['donation_goal'];
-                $event->contribution_from_members = $data['contribution_from_members'];
-                $event->donation_deadline = $data['donation_deadline'] ?? null;
-                $event->save();
-            } else {
-
-                $event->donation_goal = null;
-                $event->contribution_from_members = false;
-                $event->donation_deadline = null;
-                $event->save();
-            }
+            //     $event->donation_goal = null;
+            //     $event->contribution_from_members = false;
+            //     $event->donation_deadline = null;
+            //     $event->save();
+            // }
 
 
             if (isset($data['cohost_ids'])) {
