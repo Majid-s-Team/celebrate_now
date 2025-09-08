@@ -11,38 +11,58 @@ class WalletController extends Controller
 {
     public function myWallet()
     {
-        $user = auth()->user();
-        $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['balance' => 0]);
+        try {
+            $user = auth()->user();
+            $wallet = Wallet::firstOrCreate(['user_id' => $user->id], ['balance' => 0]);
 
-        return response()->json([
-            'message' => 'My wallet',
-            'data' => [
+            $data = [
                 'user_id' => $user->id,
                 'balance' => (int) $wallet->balance,
-            ],
-        ]);
+            ];
+
+            return $this->sendResponse('My wallet fetched successfully', $data);
+        } catch (\Exception $e) {
+            return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+        }
     }
+
     public function listWithDonations(Request $request)
     {
-        $authId = auth()->id();
-        $eventId = $request->query('event_id');
+        try {
+            $authId = auth()->id();
+            $eventId = $request->query('event_id');
 
-        $query = Event::with('creator:id,first_name,last_name')
-            ->with('donations.user:id,first_name,last_name');
+            if (!$eventId) {
+                return $this->sendError('Event ID is required', [], 422);
+            }
 
-        if ($eventId) {
-            $query->where('id', $eventId);
-        }
+            $event = Event::with([
+                'creator:id,first_name,last_name',
+                'donations.user:id,first_name,last_name',
+                'surpriseContributions.sender:id,first_name,last_name'
+            ])->find($eventId);
 
-        $events = $query->get();
+            if (!$event) {
+                return $this->sendError('Event not found', [], 404);
+            }
 
-        $response = $events->map(function ($event) use ($authId) {
-            $totalCollected = $event->donations()->sum('amount');
-            $remaining = max(0, ($event->target_amount ?? 0) - $totalCollected);
+            $donationTotal = $event->donations()->sum('amount');
+            $surpriseTotal = $event->surprise_contribution
+                ? $event->surpriseContributions()->sum('coins')
+                : 0;
+
+            $totalCollected = $donationTotal + $surpriseTotal;
+            $remaining = max(0, ($event->donation_goal ?? 0) - $totalCollected);
 
             $myContribution = $event->donations()
                 ->where('user_id', $authId)
-                ->sum('amount');
+                ->sum('amount')
+                +
+                ($event->surprise_contribution
+                    ? $event->surpriseContributions()
+                        ->where('sender_id', $authId)
+                        ->sum('coins')
+                    : 0);
 
             $donors = [];
             if ($event->is_show_donation) {
@@ -54,24 +74,50 @@ class WalletController extends Controller
                         'created_at' => $d->created_at->toDateTimeString(),
                     ];
                 });
+            } else {
+
+                $hostId = $event->created_by;
+                $donors = $event->donations
+                    ->where('user_id', $hostId)
+                    ->map(function ($d) {
+                        return [
+                            'user_id' => $d->user->id,
+                            'name' => $d->user->first_name . ' ' . $d->user->last_name,
+                            'amount' => $d->amount,
+                            'created_at' => $d->created_at->toDateTimeString(),
+                        ];
+                    })
+                    ->values();
             }
 
-            return [
-                'event_id' => $event->id,
-                'title' => $event->title,
-                'funding_type' => $event->funding_type,
-                'target_amount' => $event->target_amount,
-                'total_collected' => $totalCollected,
-                'remaining' => $remaining,
-                'my_contribution' => $myContribution,
-                'donors' => $event->is_show_donation ? $donors : [],
+
+            $surpriseContributors = [];
+            if ($event->surprise_contribution) {
+                $surpriseContributors = $event->surpriseContributions->map(function ($tx) {
+                    return [
+                        'user_id' => $tx->sender->id,
+                        'name' => $tx->sender->first_name . ' ' . $tx->sender->last_name,
+                        'amount' => $tx->coins,
+                        'created_at' => $tx->created_at->toDateTimeString(),
+                    ];
+                });
+            }
+
+            $data = [
+                'event_id'              => $event->id,
+                'title'                 => $event->title,
+                'funding_type'          => $event->funding_type,
+                'target_amount'         => $event->donation_goal,
+                'total_collected'       => $totalCollected,
+                'remaining'             => $remaining,
+                'my_contribution'       => $myContribution,
+                'donors'                => $donors,
+                'surprise_contributors' => $surpriseContributors,
             ];
-        });
 
-        return response()->json([
-            'message' => $eventId ? 'Event donation detail' : 'Events with donations',
-            'data' => $eventId ? $response->first() : $response,
-        ]);
+            return $this->sendResponse('Event donation & surprise contribution detail fetched successfully', $data);
+        } catch (\Exception $e) {
+            return $this->sendError('Something went wrong', [$e->getMessage()], 500);
+        }
     }
-
 }

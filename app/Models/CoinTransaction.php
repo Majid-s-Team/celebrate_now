@@ -8,7 +8,7 @@ class CoinTransaction extends Model
 {
     protected $fillable = [
         'sender_id', 'receiver_id', 'coin_package_id',
-        'post_id', 'event_id', 'coins', 'type', 'message'
+        'post_id', 'event_id', 'coins', 'type', 'message','contribution_type'
     ];
 
     public function sender()

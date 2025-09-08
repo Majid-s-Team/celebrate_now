@@ -11,183 +11,288 @@ use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 class TransactionController extends Controller
 {
+
+    // Post Contribution
+    // Agar post_id pass ho → contribution us post ke user_id ko milega.
+    // Validation: user apne khud ke post par apne aapko coins nahi bhej sakta.
+
+    //  Event Contribution (funding_type = donation_based)
+    // Jo bhi send karega uske coins event creator ke wallet me jayenge.
+    // Contribution type hamesha "donation".
+    // Message + coins save honge.
+    // Validation: event creator apne event me apne aapko coins nahi bhej sakta.
+
+    // Event Contribution (funding_type = self_financed + surprise_contribution = true)
+    // Jo bhi bhejega uska record "surprise" contribution ke sath save hoga.
+    // Receiver phir bhi event creator hoga, lekin contribution_type = surprise.
+    // Validation same (no self transfer).
     public function send(Request $request)
     {
-        $data = $request->validate([
-            'to_user_id' => ['required', 'exists:users,id'],
-            'coins' => ['required', 'integer', 'min:1'],
-            'message' => ['nullable', 'string', 'max:1000'],
-            'post_id' => ['nullable', 'exists:posts,id'],
-            'event_id' => ['nullable', 'exists:events,id'],
-        ]);
-
-        $sender = auth()->user();
-        if ((int) $data['to_user_id'] === (int) $sender->id) {
-            return response()->json(['message' => 'Cannot send coins to yourself'], 422);
-        }
-
-
-        $receiverId = (int) $data['to_user_id'];
-
-        if (!empty($data['post_id'])) {
-            $post = Post::findOrFail($data['post_id']);
-            $receiverId = (int) $post->user_id;
-        } elseif (!empty($data['event_id'])) {
-            $event = Event::findOrFail($data['event_id']);
-            $receiverId = (int) $event->created_by;
-        }
-
-
-        if ($receiverId === (int) $sender->id) {
-            return response()->json(['message' => 'Cannot send coins to yourself'], 422);
-        }
-
-        $coins = (int) $data['coins'];
-        $note = $data['message'] ?? null;
-        $postId = $data['post_id'] ?? null;
-        $eventId = $data['event_id'] ?? null;
-
-        DB::transaction(function () use ($sender, $receiverId, $coins, $note, $postId, $eventId) {
-
-            $senderWallet = Wallet::where('user_id', $sender->id)->lockForUpdate()->first();
-            if (!$senderWallet) {
-                $senderWallet = Wallet::create(['user_id' => $sender->id, 'balance' => 0]);
-                $senderWallet = Wallet::where('id', $senderWallet->id)->lockForUpdate()->first();
-            }
-
-            if ((int) $senderWallet->balance < $coins) {
-                abort(422, 'Insufficient balance');
-            }
-
-
-            $receiverWallet = Wallet::where('user_id', $receiverId)->lockForUpdate()->first();
-            if (!$receiverWallet) {
-                $receiverWallet = Wallet::create(['user_id' => $receiverId, 'balance' => 0]);
-                $receiverWallet = Wallet::where('id', $receiverWallet->id)->lockForUpdate()->first();
-            }
-
-
-            $senderWallet->balance = (int) $senderWallet->balance - $coins;
-            $senderWallet->save();
-
-            $receiverWallet->balance = (int) $receiverWallet->balance + $coins;
-            $receiverWallet->save();
-
-            CoinTransaction::create([
-                'sender_id' => $sender->id,
-                'receiver_id' => $receiverId,
-                'coin_package_id' => null,
-                'post_id' => $postId,
-                'event_id' => $eventId,
-                'coins' => $coins,
-                'type' => 'send',
-                'message' => $note,
+        try {
+            $data = $request->validate([
+                'coins' => ['required', 'integer', 'min:1'],
+                'message' => ['nullable', 'string', 'max:1000'],
+                'post_id' => ['nullable', 'exists:posts,id'],
+                'event_id' => ['nullable', 'exists:events,id'],
             ]);
 
-            CoinTransaction::create([
-                'sender_id' => $sender->id,
-                'receiver_id' => $receiverId,
-                'coin_package_id' => null,
-                'post_id' => $postId,
-                'event_id' => $eventId,
-                'coins' => $coins,
-                'type' => 'receive',
-                'message' => $note,
-            ]);
-        });
+            $sender = auth()->user();
+            $coins = (int) $data['coins'];
+            $note = $data['message'] ?? null;
 
-        return response()->json(['message' => 'Coins sent successfully']);
-    }
+            $receiverId = null;
+            $eventId = $data['event_id'] ?? null;
+            $postId = $data['post_id'] ?? null;
+            $contributionType = null;
 
+            if (!empty($postId)) {
+                $post = Post::findOrFail($postId);
+                $receiverId = $post->user_id;
+                $contributionType = 'donation';
+            } elseif (!empty($eventId)) {
+                $event = Event::findOrFail($eventId);
+                $receiverId = $event->created_by;
 
-    public function spend(Request $request)
-    {
-        $data = $request->validate([
-            'coins' => ['required', 'integer', 'min:1'],
-            'message' => ['nullable', 'string', 'max:1000'],
-            'post_id' => ['nullable', 'exists:posts,id'],
-            'event_id' => ['nullable', 'exists:events,id'],
-        ]);
-
-        $user = auth()->user();
-        $coins = (int) $data['coins'];
-
-        DB::transaction(function () use ($user, $coins, $data) {
-            $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
-            if (!$wallet) {
-                $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
-                $wallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
-            }
-
-            if ((int) $wallet->balance < $coins) {
-                abort(422, 'Insufficient balance');
-            }
-
-            $wallet->balance = (int) $wallet->balance - $coins;
-            $wallet->save();
-
-            CoinTransaction::create([
-                'sender_id' => $user->id,
-                'receiver_id' => null, // platform
-                'coin_package_id' => null,
-                'post_id' => $data['post_id'] ?? null,
-                'event_id' => $data['event_id'] ?? null,
-                'coins' => $coins,
-                'type' => 'spend',
-                'message' => $data['message'] ?? null,
-            ]);
-        });
-
-        return response()->json(['message' => 'Coins spent successfully']);
-    }
-    public function myTransactions(Request $request)
-    {
-        $user = auth()->user();
-
-        $request->validate([
-            'type' => ['nullable', Rule::in(['purchase', 'send', 'receive', 'spend'])],
-            'direction' => ['nullable', Rule::in(['all', 'in', 'out'])],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
-
-        $type = $request->get('type');
-        $direction = $request->get('direction', 'all');
-        $perPage = (int) ($request->get('per_page', 15));
-
-        $q = CoinTransaction::query()
-            ->with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'package:id,coins,price,currency'])
-            ->where(function ($sub) use ($user, $direction) {
-                if ($direction === 'in') {
-                    $sub->where(function ($s) use ($user) {
-                        $s->where('receiver_id', $user->id)
-                            ->orWhere(function ($s2) use ($user) {
-                                $s2->whereNull('receiver_id')->where('sender_id', $user->id)->where('type', 'purchase'); // rare shape (not used here)
-                            });
-                    });
-                } elseif ($direction === 'out') {
-                    $sub->where('sender_id', $user->id);
-                } else {
-                    $sub->where(function ($s) use ($user) {
-                        $s->where('sender_id', $user->id)
-                            ->orWhere('receiver_id', $user->id);
-                    });
+                $eventStart = Carbon::parse($event->date . ' ' . $event->start_time);
+                if (now()->greaterThanOrEqualTo($eventStart)) {
+                    return $this->sendError('Event has already started or ended, cannot contribute.', [], 422);
                 }
+
+                if ($event->funding_type === 'donation_based') {
+                    $contributionType = 'donation';
+                } elseif ($event->funding_type === 'self_financed') {
+                    if ($event->surprise_contribution) {
+                        $contributionType = 'surprise';
+                    } else {
+                        return $this->sendError('Surprise contribution not allowed for this event.', [], 422);
+                    }
+                }
+            }
+
+            if (!$receiverId) {
+                return $this->sendError('Invalid contribution target', [], 422);
+            }
+
+            if ($receiverId === $sender->id) {
+                return $this->sendError('Cannot send coins to yourself', [], 422);
+            }
+
+            DB::transaction(function () use ($sender, $receiverId, $coins, $note, $postId, $eventId, $contributionType) {
+                $senderWallet = Wallet::firstOrCreate(
+                    ['user_id' => $sender->id],
+                    ['balance' => 0]
+                );
+                $senderWallet->refresh()->lockForUpdate();
+
+                if ($senderWallet->balance < $coins) {
+                    abort(422, 'Insufficient balance');
+                }
+
+                $receiverWallet = Wallet::firstOrCreate(
+                    ['user_id' => $receiverId],
+                    ['balance' => 0]
+                );
+                $receiverWallet->refresh()->lockForUpdate();
+
+                $senderWallet->decrement('balance', $coins);
+                $receiverWallet->increment('balance', $coins);
+
+                CoinTransaction::create([
+                    'sender_id' => $sender->id,
+                    'receiver_id' => $receiverId,
+                    'coin_package_id' => null,
+                    'post_id' => $postId,
+                    'event_id' => $eventId,
+                    'coins' => $coins,
+                    'type' => 'send',
+                    'message' => $note,
+                    'contribution_type' => $contributionType,
+                ]);
+
+                CoinTransaction::create([
+                    'sender_id' => $sender->id,
+                    'receiver_id' => $receiverId,
+                    'coin_package_id' => null,
+                    'post_id' => $postId,
+                    'event_id' => $eventId,
+                    'coins' => $coins,
+                    'type' => 'receive',
+                    'message' => $note,
+                    'contribution_type' => $contributionType,
+                ]);
             });
 
-        if ($type) {
-            $q->where('type', $type);
+            return $this->sendResponse('Coins sent successfully');
+        } catch (\Exception $e) {
+            return $this->sendError('Failed to send coins', ['error' => $e->getMessage()], 500);
         }
-
-        $q->orderByDesc('id');
-
-        $items = $q->paginate($perPage);
-
-        return response()->json([
-            'message' => 'My transactions',
-            'data' => $items,
-        ]);
     }
+
+
+
+    public function eventTransactions(Request $request, $eventId)
+    {
+        try {
+            $user = auth()->user();
+            $event = Event::findOrFail($eventId);
+
+            $totalDonated = CoinTransaction::where('event_id', $eventId)
+                ->where('type', 'send')
+                ->sum('coins');
+
+            $targetAmount = $event->donation_goal ?? 0;
+            $remaining = max($targetAmount - $totalDonated, 0);
+
+            $percentage = $targetAmount > 0 ? round(($totalDonated / $targetAmount) * 100, 2) : 0;
+
+            $response = [
+                'event_id' => $event->id,
+                'event_title' => $event->title,
+                'target_amount' => $targetAmount,
+                'total_donated' => $totalDonated,
+                'remaining' => $remaining,
+                'percentage' => $percentage,
+                'contributors' => [],
+                'surprise' => [],
+            ];
+
+            $donations = CoinTransaction::where('event_id', $eventId)
+                ->where('type', 'send')
+                ->where('contribution_type', 'donation')
+                ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
+                ->groupBy('sender_id')
+                ->with('sender:id,first_name,last_name')
+                ->get();
+
+            $surprises = CoinTransaction::where('event_id', $eventId)
+                ->where('type', 'send')
+                ->where('contribution_type', 'surprise')
+                ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
+                ->groupBy('sender_id')
+                ->with('sender:id,first_name,last_name')
+                ->get();
+
+            if ($event->created_by == $user->id) {
+                $response['contributors'] = $donations->map(function ($row) {
+                    return [
+                        'user_id' => $row->sender_id,
+                        'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
+                        'coins' => $row->total_coins,
+                        'type' => 'donation',
+                    ];
+                });
+
+                $response['surprise'] = $surprises->map(function ($row) {
+                    return [
+                        'user_id' => $row->sender_id,
+                        'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
+                        'coins' => $row->total_coins,
+                        'type' => 'surprise',
+                    ];
+                });
+            } else {
+                if ($event->is_show_donation) {
+                    $response['contributors'] = $donations->map(function ($row) {
+                        return [
+                            'user_id' => $row->sender_id,
+                            'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
+                            'coins' => $row->total_coins,
+                            'type' => 'donation',
+                        ];
+                    });
+
+                    $response['surprise'] = $surprises->map(function ($row) {
+                        return [
+                            'user_id' => $row->sender_id,
+                            'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
+                            'coins' => $row->total_coins,
+                            'type' => 'surprise',
+                        ];
+                    });
+                } else {
+                    $ownDonation = $donations->firstWhere('sender_id', $user->id);
+                    if ($ownDonation) {
+                        $response['contributors'][] = [
+                            'user_id' => $ownDonation->sender_id,
+                            'name' => $ownDonation->sender->first_name . ' ' . $ownDonation->sender->last_name,
+                            'coins' => $ownDonation->total_coins,
+                            'type' => 'donation',
+                        ];
+                    }
+
+                    $ownSurprise = $surprises->firstWhere('sender_id', $user->id);
+                    if ($ownSurprise) {
+                        $response['surprise'][] = [
+                            'user_id' => $ownSurprise->sender_id,
+                            'name' => $ownSurprise->sender->first_name . ' ' . $ownSurprise->sender->last_name,
+                            'coins' => $ownSurprise->total_coins,
+                            'type' => 'surprise',
+                        ];
+                    }
+                }
+            }
+
+            return $this->sendResponse('Event transactions fetched successfully', $response);
+        } catch (\Exception $e) {
+            return $this->sendError('Failed to fetch event transactions', ['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function gifts(Request $request)
+    {
+        try {
+            $user = auth()->user();
+
+            $type = $request->query('type', 'sent'); 
+            $postId = $request->query('post_id');
+
+            $query = CoinTransaction::with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'post:id,caption,user_id'])
+                ->whereNotNull('post_id');
+
+            if ($type === 'sent') {
+                $query->where('sender_id', $user->id)->where('type', 'send');
+            } elseif ($type === 'received') {
+                $query->where('receiver_id', $user->id)->where('type', 'receive');
+            }
+
+            if (!empty($postId)) {
+                $query->where('post_id', $postId);
+            }
+
+            $transactions = $query->orderBy('id', 'desc')->get();
+
+            $response = $transactions->map(function ($tx) use ($type) {
+                return [
+                    'transaction_id' => $tx->id,
+                    'post_id' => $tx->post_id,
+                    'post_title' => $tx->post->caption ?? null,
+                    'coins' => $tx->coins,
+                    'message' => $tx->message,
+                    'contribution_type' => $tx->contribution_type,
+                    'sender' => [
+                        'id' => $tx->sender->id,
+                        'name' => $tx->sender->first_name . ' ' . $tx->sender->last_name,
+                    ],
+                    'receiver' => [
+                        'id' => $tx->receiver->id,
+                        'name' => $tx->receiver->first_name . ' ' . $tx->receiver->last_name,
+                    ],
+                    'type' => $tx->type,
+                    'created_at' => $tx->created_at->toDateTimeString(),
+                ];
+            });
+
+            return $this->sendResponse("Gifts {$type} successfully", $response);
+
+        } catch (\Exception $e) {
+            return $this->sendError('Failed to fetch gifts', ['error' => $e->getMessage()], 500);
+        }
+    }
+
+
+
 }

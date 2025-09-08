@@ -42,6 +42,13 @@ class EventController extends Controller
             'donation_deadline' => 'nullable|date|after:date',
 
         ]);
+        if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
+            return $this->sendError("Surprise contribution is not allowed for donation based events.", [], 422);
+        }
+
+        if (($data['funding_type'] ?? null) === 'donation_based') {
+            $data['surprise_contribution'] = false;
+        }
 
         DB::beginTransaction();
         try {
@@ -352,6 +359,77 @@ class EventController extends Controller
 
         return $this->sendResponse('Event posts fetched successfully', $posts);
     }
+
+public function getEventMembers($eventId)
+{
+    try {
+        $event = Event::with(['members.user'])->findOrFail($eventId);
+
+        $members = $event->members->map(function ($member) {
+            return [
+                'id' => $member->id,
+                'role' => $member->role,
+                'status' => $member->status,
+                'user' => [
+                    'id' => $member->user->id,
+                    'first_name' => $member->user->first_name,
+                    'last_name' => $member->user->last_name,
+                    'email' => $member->user->email,
+                    'profile_image' => $member->user->profile_image,
+                ],
+            ];
+        });
+
+        return $this->sendResponse('Event members fetched successfully', [
+            'event_id' => $event->id,
+            'event_title' => $event->title,
+            'members' => $members,
+        ]);
+    } catch (\Exception $e) {
+        return $this->sendError('Failed to fetch event members', ['error' => $e->getMessage()], 500);
+    }
+}
+
+
+public function getUserEventPolls(Request $request)
+{
+    try {
+        $user = auth()->user();
+        $eventId = $request->input('event_id'); 
+
+        $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
+            $q->where('user_id', $user->id);
+        })
+        ->with([
+            'creator',
+            'members.user',
+            'polls.creator',
+            'polls.options.addedBy',
+            'polls.candidates.candidate',
+            'polls.votes.voter',
+            'polls.votes.candidate',
+            'posts.user',
+            'posts.media',
+            'posts.category',
+            'posts.tags',
+            'posts.likes',
+            'posts.comments.replies', 
+            'posts.comments.user',
+            'posts.comments.replies.user',
+        ]);
+
+        if ($eventId) {
+            $eventsQuery->where('id', $eventId);
+        }
+
+        $events = $eventsQuery->get();
+
+        return $this->sendResponse('User event polls & posts fetched successfully', $events);
+    } catch (\Exception $e) {
+        return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
+    }
+}
+
 
 
 }

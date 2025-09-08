@@ -5,12 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use App\Traits\ExcludeBlockedUsersScope;
 
 
 class Post extends Model
 {
-    use HasFactory,SoftDeletes,ExcludeBlockedUsersScope;
+    use HasFactory, SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -57,13 +56,13 @@ class Post extends Model
         return $this->hasMany(Reply::class);
     }
     public function reports()
-{
-    return $this->hasMany(PostReport::class);
-}
-public function event()
-{
-    return $this->belongsTo(Event::class);
-}
+    {
+        return $this->hasMany(PostReport::class);
+    }
+    public function event()
+    {
+        return $this->belongsTo(Event::class);
+    }
 
 
 

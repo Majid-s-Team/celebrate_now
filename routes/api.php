@@ -114,7 +114,8 @@ Route::prefix('auth')->group(function () {
         Route::delete('/events/{id}', [EventController::class, 'destroy']);
 
         Route::get('/events/{id}/group-members-for-vote', [EventController::class, 'groupMembersForVote']);
-
+        Route::get('/events/{eventId}/members', [EventController::class, 'getEventMembers']);
+        Route::get('/user/event-polls', [EventController::class, 'getUserEventPolls']);
         Route::post('/polls/vote', [PollController::class, 'vote']);
         Route::post('/polls/create', [PollController::class, 'createPoll']);
         Route::post('/polls/{pollId}/options/add', [PollController::class, 'addOption']);
@@ -136,9 +137,10 @@ Route::prefix('auth')->group(function () {
         Route::post('/coins/purchase', [CoinController::class, 'purchase']);
         Route::post('/coins/send', [TransactionController::class, 'send']);
         Route::post('/coins/spend', [TransactionController::class, 'spend']);
+        Route::get('/gifts', [TransactionController::class, 'gifts']);
 
-        Route::get('/coins/transactions', [TransactionController::class, 'myTransactions']);
-         Route::get('/with-dsonations', [WalletController::class, 'listWithDonations']);
+        Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);
+         Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
 
 
 

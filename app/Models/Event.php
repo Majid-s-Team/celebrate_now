@@ -23,6 +23,10 @@ class Event extends Model
     {
         return $this->belongsTo(EventCategory::class, 'event_type_id');
     }
+    public function posts()
+    {
+        return $this->hasMany(Post::class);
+    }
 
     public function members()
     {
@@ -61,5 +65,25 @@ class Event extends Model
     {
         return $this->belongsTo(Event::class);
     }
+    
+    // public function surpriseContributions()
+    // {
+    //     return $this->hasMany(CoinTransaction::class, 'event_id')
+    //         ->where('type', 'send'); 
+    // }
+public function surpriseContributions()
+    {
+        return $this->hasMany(CoinTransaction::class)
+            ->where('contribution_type', 'surprise')
+            ->where('type', 'send');
+    }
+
+    public function donationContributions()
+    {
+        return $this->hasMany(CoinTransaction::class)
+            ->where('contribution_type', 'donation')
+            ->where('type', 'send');
+    }
+
 
 }
