@@ -27,6 +27,7 @@ use App\Http\Controllers\API\CoinController;
 use App\Http\Controllers\API\WalletController;
 use App\Http\Controllers\API\TransactionController;
 use App\Http\Controllers\API\CardController;
+use App\Http\Controllers\API\NotificationController;
 
 
 Route::prefix('auth')->group(function () {
@@ -144,6 +145,14 @@ Route::prefix('auth')->group(function () {
         Route::post('cards', [CardController::class, 'store']);
         Route::put('cards/{id}', [CardController::class, 'update']);
         Route::delete('cards/{id}', [CardController::class, 'destroy']);
+
+        Route::get('notifications', [NotificationController::class, 'index']);
+        Route::get('notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::patch('notifications/{id}/read', [NotificationController::class, 'markAsRead']);
+        Route::patch('notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('notifications/{id}', [NotificationController::class, 'destroy']);
+        Route::delete('notifications', [NotificationController::class, 'clearAll']);
+        Route::post('notifications', [NotificationController::class, 'create']);
 
         Route::post('coins/purchase', [CoinController::class, 'purchase']);
         Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);

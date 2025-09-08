@@ -29,5 +29,6 @@ php artisan migrate --path=/database/migrations/2025_09_03_130647_create_poll_op
 php artisan migrate --path=/database/migrations/2025_09_03_124711_create_poll_member_options_table.php
 php artisan migrate  --path=/database/migrations/2025_09_03_170759_update_posts_add_event_id_and_update_privacy_column.php
 php artisan migrate  --path=/database/migrations/2025_09_08_103205_create_cards_table.php
+php artisan migrate  --path=/database\migrations\2025_09_08_110016_create_notifications_table.php
 ALTER TABLE `celebrate_now`.`posts`   
 	CHANGE `privacy` `privacy` ENUM('public','private') CHARSET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT 'public' NULL;

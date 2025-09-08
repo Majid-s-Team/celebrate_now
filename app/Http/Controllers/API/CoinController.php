@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\Post;
 use App\Models\Card;
 use App\Models\User;
+use App\Models\Notification;
 use App\Models\Wallet;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -117,6 +118,13 @@ class CoinController extends Controller
                     'coins' => $package->coins,
                     'type' => 'purchase',
                     'message' => 'Purchased ' . $package->coins . ' coins using card #' . $card->id,
+                ]);
+
+                // Send notification
+                Notification::create([
+                    'user_id' => $user->id,
+                    'title'   => 'Coin Purchase Successful',
+                    'message' => 'You purchased ' . $package->coins . ' coins successfully.',
                 ]);
 
                 DB::commit();
