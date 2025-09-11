@@ -258,7 +258,6 @@ class PostController extends Controller
 
     public function show($id)
     {
-
         // return Post::with(['user', 'tags.user', 'likes', 'comments.user'])->findOrFail($id);
         $post = Post::withCount(['likes', 'comments'])
 
@@ -423,91 +422,69 @@ class PostController extends Controller
     // and added the ability to filter by category
     // and return the posts with likes, comments, replies, media, and counts
 
-  public function followingPosts(Request $request)
-{
-    $user = auth()->user();
-    $categoryId = $request->query('category_id');
-    $eventCategoryId = $request->query('event_category_id'); // ✅ new
-    $isRecentPost = $request->query('is_recent_post');       // ✅ new
-    $search = $request->query('search');
-    $perPage = $request->query('per_page', 10);
-    $page = $request->query('page', 1);
+    public function followingPosts(Request $request)
+    {
+        $user = auth()->user();
+        $categoryId = $request->query('category_id');
+        $search = $request->query('search');
+        $perPage = $request->query('per_page', 10);
+        $page = $request->query('page', 1);
 
-    $followingIds = $user->following()->pluck('following_id')->toArray();
+        $followingIds = $user->following()->pluck('following_id')->toArray();
 
-    $postsQuery = Post::withCount(['likes', 'comments'])
-        ->with([
-            'user',
-            'tags',
-            'tags.user',
-            'likes',
-            'likes.user',
-            'media',
-            'comments' => function ($query) {
-                $query->withCount('replies')
-                    ->with([
-                        'user',
-                        'likes.user',
-                        'replies.user'
-                    ]);
-            }
-        ])
-        ->whereIn('user_id', $followingIds)
-        ->whereHas('user', fn($q) => $q->where('is_active', 1))
-        ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()))
-        ->where(function ($q) {
-            $q->where('privacy', 'public')
-              ->orWhere('privacy', 'private');
-        });
+        $postsQuery = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'media',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with([
+                            'user',
+                            'likes.user',
+                            'replies.user'
+                        ]);
+                }
+            ])
+            ->whereIn('user_id', $followingIds)
+            ->whereHas('user', fn($q) => $q->where('is_active', 1))
+            ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()))
+            ->where(function ($q) {
+                $q->where('privacy', 'public')
+                    ->orWhere('privacy', 'private');
+            });
 
-    // ✅ Filter: existing category_id
-    if ($categoryId) {
-        $postsQuery->where('event_category_id', $categoryId);
-    }
-
-    // ✅ Filter: new event_category_id
-    if ($eventCategoryId) {
-        $postsQuery->where('event_category_id', $eventCategoryId);
-    }
-
-    // ✅ Search by user name
-    if ($search) {
-        $postsQuery->whereHas('user', function ($q) use ($search) {
-            $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
-                ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"])
-                ->orWhere('first_name', 'like', "%{$search}%")
-                ->orWhere('last_name', 'like', "%{$search}%");
-        });
-    }
-
-    // ✅ Sorting by is_recent_post param
-    if (!is_null($isRecentPost)) {
-        if (filter_var($isRecentPost, FILTER_VALIDATE_BOOLEAN)) {
-            $postsQuery->orderBy('created_at', 'desc'); // latest first
-        } else {
-            $postsQuery->orderBy('created_at', 'asc'); // oldest first
+        if ($categoryId) {
+            $postsQuery->where('event_category_id', $categoryId);
         }
-    } else {
-        $postsQuery->orderBy('created_at', 'desc'); // default
-    }
 
-    // ✅ Pagination
-    $paginatedPosts = $postsQuery->paginate($perPage, ['*'], 'page', $page);
+        if ($search) {
+            $postsQuery->whereHas('user', function ($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
 
-    // ✅ Add isFollow and is_liked flags
-    $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
-        $post->isFollow = in_array($post->user_id, $followingIds);
-        $post->is_liked = $post->likes->contains('user_id', auth()->id());
-        $post->comments->transform(function ($comment) {
-            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-            return $comment;
+        $paginatedPosts = $postsQuery->latest()->paginate($perPage, ['*'], 'page', $page);
+
+        // Add isFollow and is_likedto each post
+        $paginatedPosts->getCollection()->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            $post->comments->transform(function ($comment) {
+                $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                return $comment;
+            });
+            return $post;
         });
-        return $post;
-    });
 
-    return $this->sendResponse('Following posts fetched', $paginatedPosts);
-}
+        // dd($paginatedPosts->getCollection());
 
+        return $this->sendResponse('Following posts fetched', $paginatedPosts);
+    }
 
 
 
@@ -537,81 +514,55 @@ class PostController extends Controller
 
     // }
 
-public function allPosts(Request $request)
-{
-    $user = auth()->user();
-    $categoryId = $request->query('category_id'); // Existing param
-    $search = $request->query('search');
-    $perPage = $request->get('per_page', 10); // Default 10 per page
+    public function allPosts(Request $request)
+    {
+        $user = auth()->user();
+        $categoryId = $request->query('category_id');
+        $search = $request->query('search');
+        $perPage = $request->get('per_page', 10); // Default 10 per page
 
-    // ✅ New optional params
-    $eventCategoryId = $request->query('event_category_id');
-    $isRecentPost = $request->query('is_recent_post');
+        $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
 
-    $followingIds = $user ? $user->following()->pluck('following_id')->toArray() : [];
-
-    $query = Post::withCount(['likes', 'comments'])
-        ->with([
-            'user',
-            'tags',
-            'tags.user',
-            'likes',
-            'likes.user',
-            'comments' => function ($query) {
-                $query->withCount('replies')
-                    ->with(['user', 'likes.user', 'replies.user']);
-            },
-            'media'
-        ])
-        ->where('privacy', 'public')
-        ->whereHas('user', fn($q) => $q->where('is_active', 1))
-        ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()));
-
-    // ✅ Old category_id filter
-    if ($categoryId) {
-        $query->where('event_category_id', $categoryId);
-    }
-
-    // ✅ New event_category_id filter
-    if ($eventCategoryId) {
-        $query->where('event_category_id', $eventCategoryId);
-    }
-
-    // ✅ Search by name logic (unchanged)
-    if ($search) {
-        $query->whereHas('user', function ($q) use ($search) {
-            $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
-                ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"])
-                ->orWhere('first_name', 'like', "%{$search}%")
-                ->orWhere('last_name', 'like', "%{$search}%");
-        });
-    }
-
-    // ✅ Handle post ordering based on is_recent_post
-    if (!is_null($isRecentPost)) {
-        if (filter_var($isRecentPost, FILTER_VALIDATE_BOOLEAN)) {
-            $query->orderBy('created_at', 'desc'); // recent first
-        } else {
-            $query->orderBy('created_at', 'asc'); // oldest first
+        $query = Post::withCount(['likes', 'comments'])
+            ->with([
+                'user',
+                'tags',
+                'tags.user',
+                'likes',
+                'likes.user',
+                'comments' => function ($query) {
+                    $query->withCount('replies')
+                        ->with(['user', 'likes.user', 'replies.user']);
+                },
+                'media'
+            ])
+            ->where('privacy', 'public')
+            ->whereHas('user', fn($q) => $q->where('is_active', 1))
+            ->whereDoesntHave('reports', fn($q) => $q->where('user_id', auth()->id()));
+        if ($categoryId) {
+            $query->where('event_category_id', $categoryId);
         }
-    } else {
-        $query->orderBy('created_at', 'desc'); // default recent first
+        //search parameter fixed for searching for complete name
+        if ($search) {
+            $query->whereHas('user', function ($q) use ($search) {
+                $q->whereRaw("CONCAT(first_name, ' ', last_name) LIKE ?", ["%{$search}%"])
+                    ->orWhereRaw("CONCAT(last_name, ' ', first_name) LIKE ?", ["%{$search}%"]) // reverse order (optional)
+                    ->orWhere('first_name', 'like', "%{$search}%")
+                    ->orWhere('last_name', 'like', "%{$search}%");
+            });
+        }
+
+
+        $posts = $query->latest()->paginate($perPage);
+
+        $posts->getCollection()->transform(function ($post) use ($followingIds) {
+            $post->isFollow = in_array($post->user_id, $followingIds);
+            $post->is_liked = $post->likes->contains('user_id', auth()->id());
+            return $post;
+        });
+
+        return $this->sendResponse('All public posts fetched', $posts);
     }
-
-    // ✅ Paginate
-    $posts = $query->paginate($perPage);
-
-    // ✅ Add isFollow and is_liked flags
-    $posts->getCollection()->transform(function ($post) use ($followingIds) {
-        $post->isFollow = in_array($post->user_id, $followingIds);
-        $post->is_liked = $post->likes->contains('user_id', auth()->id());
-        return $post;
-    });
-
-    return $this->sendResponse('All public posts fetched', $posts);
-}
-
-
 
 
     public function postDetails($id)

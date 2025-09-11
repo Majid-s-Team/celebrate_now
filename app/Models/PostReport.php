@@ -3,12 +3,9 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use App\Traits\ExcludeBlockedUsersScope;
-
 
 class PostReport extends Model
 {
-    use ExcludeBlockedUsersScope;
     protected $fillable = ['user_id', 'post_id', 'reason_id', 'other_reason'];
 
     public function post()
