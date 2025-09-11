@@ -71,5 +71,20 @@ class User extends Authenticatable
     {
         return $this->hasMany(Follow::class, 'follower_id');
     }
+    public function wallet()
+{
+    return $this->hasOne(Wallet::class);
+}
+
+public function sentTransactions()
+{
+    return $this->hasMany(CoinTransaction::class, 'sender_id');
+}
+
+public function receivedTransactions()
+{
+    return $this->hasMany(CoinTransaction::class, 'receiver_id');
+}
+
 
 }
