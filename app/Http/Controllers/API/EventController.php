@@ -137,18 +137,62 @@ class EventController extends Controller
     }
 
     // List all events
-    public function index()
-    {
-        $events = Event::with([
-            'creator:id,first_name,last_name,email,profile_image',
-            'category',
-            'members.user:id,first_name,last_name,profile_image',
-            'polls.candidates.candidate:id,first_name,last_name,profile_image',
-            'polls.votes'
-        ])->get();
+public function index()
+{
+    $events = Event::with([
+        'creator:id,first_name,last_name,email,profile_image',
+        'category',
+        'members.user:id,first_name,last_name,profile_image',
+        'polls.candidates.candidate:id,first_name,last_name,profile_image',
+        'polls.votes',
+        'posts.user:id,first_name,last_name,profile_image',    // Posts and the user who posted them
+        'posts.likes',                                         // Likes on posts
+        'posts.comments.user:id,first_name,last_name,profile_image',  // Comments and the users who commented
+        'posts.comments.likes',                                // Likes on comments
+        'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
+        'posts.comments.replies.likes'                         // Likes on replies
+    ])->get();
 
-        return $this->sendResponse("Events fetched successfully", $events);
-    }
+    // Iterate over the events and add counts for posts, likes, comments, and replies
+    $events = $events->map(function ($event) {
+        // Count total posts
+        $event->total_posts = $event->posts->count();
+
+        // Iterate over posts and add counts for likes, comments, and replies
+        $event->posts = $event->posts->map(function ($post) {
+            // Count likes for the post
+            $post->likes_count = $post->likes->count();
+
+            // Count comments for the post
+            $post->comments_count = $post->comments->count();
+
+            // Iterate over comments and add counts for replies and likes
+            $post->comments = $post->comments->map(function ($comment) {
+                // Count likes for the comment
+                $comment->likes_count = $comment->likes->count();
+
+                // Count replies for the comment
+                $comment->replies_count = $comment->replies->count();
+
+                // Iterate over replies and add likes count
+                $comment->replies = $comment->replies->map(function ($reply) {
+                    // Count likes for each reply
+                    $reply->likes_count = $reply->likes->count();
+                    return $reply;
+                });
+
+                return $comment;
+            });
+
+            return $post;
+        });
+
+        return $event;
+    });
+
+    return $this->sendResponse("Events fetched successfully", $events);
+}
+
 
     // Show single event
     public function show($id)
