@@ -396,47 +396,6 @@ public function getEventMembers($eventId)
     }
 }
 
-// public function getUserEventPolls(Request $request)
-// {
-//     try {
-//         $user = auth()->user();
-//         $eventId = $request->input('event_id');
-
-//         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
-//             $q->where('user_id', $user->id);
-//         })
-//         ->with([
-//             'creator',
-//             'members.user',
-//             'polls.creator',
-//             'polls.options.addedBy',
-//             'polls.candidates.candidate',
-//             'polls.votes.voter',
-//             'polls.votes.candidate',
-//             'posts.user',
-//             'posts.media',
-//             'posts.category',
-//             'posts.tags',
-//             'posts.likes',
-//             'posts.comments.replies',
-//             'posts.comments.user',
-//             'posts.comments.replies.user',
-//         ]);
-
-//         if ($eventId) {
-//             $eventsQuery->where('id', $eventId);
-//         }
-
-//         $events = $eventsQuery->get();
-
-//         return $this->sendResponse('User event polls & posts fetched successfully', $events);
-//     } catch (\Exception $e) {
-//         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
-//     }
-// }
-
-
-
 public function getUserEventPolls(Request $request)
 {
     try {
@@ -468,44 +427,85 @@ public function getUserEventPolls(Request $request)
             $eventsQuery->where('id', $eventId);
         }
 
-        // Get events with all relationships
         $events = $eventsQuery->get();
-
-        // ✅ Optional: filter out members with no user
-        $events->each(function ($event) {
-            $event->members = $event->members
-                ->filter(fn($member) => $member->user !== null)
-                ->values();
-        });
-
-        // ✅ Optional: Filter polls where creator is not null
-        $events->each(function ($event) {
-            $event->polls = $event->polls
-                ->filter(fn($poll) => $poll->creator !== null)
-                ->values();
-        });
-
-        // ✅ Optional: Filter posts where user exists
-        $events->each(function ($event) {
-            $event->posts = $event->posts
-                ->filter(fn($post) => $post->user !== null)
-                ->each(function ($post) {
-                    $post->comments = $post->comments
-                        ->filter(fn($comment) => $comment->user !== null)
-                        ->each(function ($comment) {
-                            $comment->replies = $comment->replies
-                                ->filter(fn($reply) => $reply->user !== null)
-                                ->values();
-                        })
-                        ->values();
-                })
-                ->values();
-        });
 
         return $this->sendResponse('User event polls & posts fetched successfully', $events);
     } catch (\Exception $e) {
         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
     }
 }
+
+
+
+// public function getUserEventPolls(Request $request)
+// {
+//     try {
+//         $user = auth()->user();
+//         $eventId = $request->input('event_id');
+
+//         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
+//             $q->where('user_id', $user->id);
+//         })
+//         ->with([
+//             'creator',
+//             'members.user',
+//             'polls.creator',
+//             'polls.options.addedBy',
+//             'polls.candidates.candidate',
+//             'polls.votes.voter',
+//             'polls.votes.candidate',
+//             'posts.user',
+//             'posts.media',
+//             'posts.category',
+//             'posts.tags',
+//             'posts.likes',
+//             'posts.comments.replies',
+//             'posts.comments.user',
+//             'posts.comments.replies.user',
+//         ]);
+
+//         if ($eventId) {
+//             $eventsQuery->where('id', $eventId);
+//         }
+
+//         // Get events with all relationships
+//         $events = $eventsQuery->get();
+
+//         // ✅ Optional: filter out members with no user
+//         $events->each(function ($event) {
+//             $event->members = $event->members
+//                 ->filter(fn($member) => $member->user !== null)
+//                 ->values();
+//         });
+
+//         // ✅ Optional: Filter polls where creator is not null
+//         $events->each(function ($event) {
+//             $event->polls = $event->polls
+//                 ->filter(fn($poll) => $poll->creator !== null)
+//                 ->values();
+//         });
+
+//         // ✅ Optional: Filter posts where user exists
+//         $events->each(function ($event) {
+//             $event->posts = $event->posts
+//                 ->filter(fn($post) => $post->user !== null)
+//                 ->each(function ($post) {
+//                     $post->comments = $post->comments
+//                         ->filter(fn($comment) => $comment->user !== null)
+//                         ->each(function ($comment) {
+//                             $comment->replies = $comment->replies
+//                                 ->filter(fn($reply) => $reply->user !== null)
+//                                 ->values();
+//                         })
+//                         ->values();
+//                 })
+//                 ->values();
+//         });
+
+//         return $this->sendResponse('User event polls & posts fetched successfully', $events);
+//     } catch (\Exception $e) {
+//         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
+//     }
 }
+
 
