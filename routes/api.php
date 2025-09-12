@@ -112,6 +112,7 @@ Route::prefix('auth')->group(function () {
         Route::get('/events', [EventController::class, 'index']);
         Route::get('/events/{id}', [EventController::class, 'show']);
         Route::delete('/events/{id}', [EventController::class, 'destroy']);
+        Route::post('/events/del-members',[EventController::class,'deleteMember']);
 
         Route::get('/events/{id}/group-members-for-vote', [EventController::class, 'groupMembersForVote']);
         Route::get('/events/{eventId}/members', [EventController::class, 'getEventMembers']);

@@ -207,10 +207,9 @@ class EventController extends Controller
         try {
             $event->update(array_filter($data, fn($value) => !is_null($value)));
 
-
             if ($event->funding_type === 'donation_based') {
                 $event->donation_goal = $data['donation_goal'];
-                $event->contribution_from_members = $data['contribution_from_members'];
+                // $event->contribution_from_members = $data['contribution_from_members'] ?? 0;
                 $event->donation_deadline = $data['donation_deadline'] ?? null;
                 $event->save();
             } else {
@@ -395,7 +394,7 @@ public function getUserEventPolls(Request $request)
 {
     try {
         $user = auth()->user();
-        $eventId = $request->input('event_id'); 
+        $eventId = $request->input('event_id');
 
         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
             $q->where('user_id', $user->id);
@@ -413,7 +412,7 @@ public function getUserEventPolls(Request $request)
             'posts.category',
             'posts.tags',
             'posts.likes',
-            'posts.comments.replies', 
+            'posts.comments.replies',
             'posts.comments.user',
             'posts.comments.replies.user',
         ]);
@@ -429,6 +428,39 @@ public function getUserEventPolls(Request $request)
         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
     }
 }
+
+public function deleteMember(Request $request)
+{
+    $request->validate([
+        'event_id' => 'required|exists:events,id',
+        'member_id' => 'required|exists:users,id',
+    ]);
+    $user = $request->user();
+    $event = Event::find($request->event_id);
+
+    if (!$event) {
+        return $this->sendError("Event not found", [], 200);
+    }
+
+    // Only event creator ya cohost ko allow karo
+    if ($event->created_by != $user->id) {
+        return $this->sendError("Unauthorized", [], 200);
+    }
+
+    $member = EventMember::where('event_id', $event->id)
+        ->where('user_id', $request->member_id)
+        ->where('role', 'member')
+        ->first();
+
+    if (!$member) {
+        return $this->sendError("Member not found in this event", [], 200);
+    }
+
+    $member->delete();
+
+    return $this->sendResponse("Member removed successfully", []);
+}
+
 
 
 
