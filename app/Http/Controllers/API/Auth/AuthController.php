@@ -229,4 +229,27 @@ class AuthController extends Controller
 
         return $this->sendResponse('Account deactivated');
     }
+
+    public function softDeleteUser(Request $request, $userId)
+    {
+        try {
+            // Find the user by ID
+            $user = User::findOrFail($userId);
+
+            // Soft delete the user (sets 'deleted_at' timestamp)
+            $user->delete();
+
+            return response()->json([
+                'status' => 'success',
+                'message' => 'User successfully soft deleted.',
+                'data' => $user
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'User not found or an error occurred.',
+                'error' => $e->getMessage()
+            ], 404);
+        }
+    }
 }

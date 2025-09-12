@@ -137,18 +137,62 @@ class EventController extends Controller
     }
 
     // List all events
-    public function index()
-    {
-        $events = Event::with([
-            'creator:id,first_name,last_name,email,profile_image',
-            'category',
-            'members.user:id,first_name,last_name,profile_image',
-            'polls.candidates.candidate:id,first_name,last_name,profile_image',
-            'polls.votes'
-        ])->get();
+public function index()
+{
+    $events = Event::with([
+        'creator:id,first_name,last_name,email,profile_image',
+        'category',
+        'members.user:id,first_name,last_name,profile_image',
+        'polls.candidates.candidate:id,first_name,last_name,profile_image',
+        'polls.votes',
+        'posts.user:id,first_name,last_name,profile_image',    // Posts and the user who posted them
+        'posts.likes',                                         // Likes on posts
+        'posts.comments.user:id,first_name,last_name,profile_image',  // Comments and the users who commented
+        'posts.comments.likes',                                // Likes on comments
+        'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
+        'posts.comments.replies.likes'                         // Likes on replies
+    ])->get();
 
-        return $this->sendResponse("Events fetched successfully", $events);
-    }
+    // Iterate over the events and add counts for posts, likes, comments, and replies
+    $events = $events->map(function ($event) {
+        // Count total posts
+        $event->total_posts = $event->posts->count();
+
+        // Iterate over posts and add counts for likes, comments, and replies
+        $event->posts = $event->posts->map(function ($post) {
+            // Count likes for the post
+            $post->likes_count = $post->likes->count();
+
+            // Count comments for the post
+            $post->comments_count = $post->comments->count();
+
+            // Iterate over comments and add counts for replies and likes
+            $post->comments = $post->comments->map(function ($comment) {
+                // Count likes for the comment
+                $comment->likes_count = $comment->likes->count();
+
+                // Count replies for the comment
+                $comment->replies_count = $comment->replies->count();
+
+                // Iterate over replies and add likes count
+                $comment->replies = $comment->replies->map(function ($reply) {
+                    // Count likes for each reply
+                    $reply->likes_count = $reply->likes->count();
+                    return $reply;
+                });
+
+                return $comment;
+            });
+
+            return $post;
+        });
+
+        return $event;
+    });
+
+    return $this->sendResponse("Events fetched successfully", $events);
+}
+
 
     // Show single event
     public function show($id)
@@ -207,10 +251,9 @@ class EventController extends Controller
         try {
             $event->update(array_filter($data, fn($value) => !is_null($value)));
 
-
             if ($event->funding_type === 'donation_based') {
                 $event->donation_goal = $data['donation_goal'];
-                $event->contribution_from_members = $data['contribution_from_members'];
+                // $event->contribution_from_members = $data['contribution_from_members'] ?? 0;
                 $event->donation_deadline = $data['donation_deadline'] ?? null;
                 $event->save();
             } else {
@@ -395,7 +438,7 @@ public function getUserEventPolls(Request $request)
 {
     try {
         $user = auth()->user();
-        $eventId = $request->input('event_id'); 
+        $eventId = $request->input('event_id');
 
         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
             $q->where('user_id', $user->id);
@@ -413,7 +456,7 @@ public function getUserEventPolls(Request $request)
             'posts.category',
             'posts.tags',
             'posts.likes',
-            'posts.comments.replies', 
+            'posts.comments.replies',
             'posts.comments.user',
             'posts.comments.replies.user',
         ]);
@@ -429,6 +472,39 @@ public function getUserEventPolls(Request $request)
         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
     }
 }
+
+public function deleteMember(Request $request)
+{
+    $request->validate([
+        'event_id' => 'required|exists:events,id',
+        'member_id' => 'required|exists:users,id',
+    ]);
+    $user = $request->user();
+    $event = Event::find($request->event_id);
+
+    if (!$event) {
+        return $this->sendError("Event not found", [], 200);
+    }
+
+    // Only event creator ya cohost ko allow karo
+    if ($event->created_by != $user->id) {
+        return $this->sendError("Unauthorized", [], 200);
+    }
+
+    $member = EventMember::where('event_id', $event->id)
+        ->where('user_id', $request->member_id)
+        ->where('role', 'member')
+        ->first();
+
+    if (!$member) {
+        return $this->sendError("Member not found in this event", [], 200);
+    }
+
+    $member->delete();
+
+    return $this->sendResponse("Member removed successfully", []);
+}
+
 
 
 
