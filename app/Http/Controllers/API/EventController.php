@@ -137,8 +137,10 @@ class EventController extends Controller
     }
 
     // List all events
-public function index()
+public function index(Request $request)
 {
+    $perPage = $request->get("per_page", 10);
+
     $events = Event::with([
         'creator:id,first_name,last_name,email,profile_image',
         'category',
@@ -151,32 +153,22 @@ public function index()
         'posts.comments.likes',                                // Likes on comments
         'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
         'posts.comments.replies.likes'                         // Likes on replies
-    ])->get();
-
-    // Iterate over the events and add counts for posts, likes, comments, and replies
-    $events = $events->map(function ($event) {
+    ])
+    ->paginate($perPage)
+    ->through(function ($event) {
         // Count total posts
         $event->total_posts = $event->posts->count();
 
         // Iterate over posts and add counts for likes, comments, and replies
         $event->posts = $event->posts->map(function ($post) {
-            // Count likes for the post
             $post->likes_count = $post->likes->count();
-
-            // Count comments for the post
             $post->comments_count = $post->comments->count();
 
-            // Iterate over comments and add counts for replies and likes
             $post->comments = $post->comments->map(function ($comment) {
-                // Count likes for the comment
                 $comment->likes_count = $comment->likes->count();
-
-                // Count replies for the comment
                 $comment->replies_count = $comment->replies->count();
 
-                // Iterate over replies and add likes count
                 $comment->replies = $comment->replies->map(function ($reply) {
-                    // Count likes for each reply
                     $reply->likes_count = $reply->likes->count();
                     return $reply;
                 });
@@ -194,16 +186,19 @@ public function index()
 }
 
 
+
     // Show single event
-    public function show($id)
+    public function show(Request $request,$id)
     {
+        $perPage = $request->get('per_page', default: 10);
         $event = Event::with([
             'creator:id,first_name,last_name,email,profile_image',
             'category',
             'members.user:id,first_name,last_name,profile_image',
             'polls.candidates.candidate:id,first_name,last_name,profile_image',
             'polls.votes'
-        ])->find($id);
+        ])->find($id)
+        ->paginate($perPage);
 
         if (!$event) {
             return $this->sendError("Event not found", [], 404);
@@ -385,7 +380,7 @@ public function index()
             return $this->sendError('You are not authorized to view posts of this event.', [], 403);
         }
 
-        $perPage = $request->get('per_page', 10);
+        $perPage = $request->get('per_page', default: 10);
 
         $posts = Post::where('event_id', $eventId)
             ->with(['user', 'media', 'likes', 'comments.user', 'comments.replies.user'])
@@ -404,19 +399,21 @@ public function index()
         return $this->sendResponse('Event posts fetched successfully', $posts);
     }
 
-public function getEventMembers($eventId)
+public function getEventMembers(Request $request, $eventId)
 {
     try {
-        $event = Event::with(['members.user'])->findOrFail($eventId);
+        $perPage = $request->get("per_page", 10);
 
-        // Filter out members who don't have a user
-        $members = $event->members
-            ->filter(function ($member) {
-                return $member->user !== null;
-            })
-            ->map(function ($member) {
+        $event = Event::select("id", "title")->findOrFail($eventId);
+
+        // Paginate members from DB
+        $members = EventMember::with("user")
+            ->where("event_id", $eventId)
+            ->whereHas("user") // sirf woh members jinke paas user ho
+            ->paginate($perPage)
+            ->through(function ($member) {
                 return [
-                    'id' => $member->id, // You may want to use $member->id here
+                    'id' => $member->id,
                     'role' => $member->role,
                     'status' => $member->status,
                     'user' => [
@@ -427,22 +424,30 @@ public function getEventMembers($eventId)
                         'profile_image' => $member->user->profile_image,
                     ],
                 ];
-            })
-            ->values(); // Re-index the collection (optional)
+            });
 
+        // custom pagination used as the members are derived through the event not directly through the query
         return $this->sendResponse('Event members fetched successfully', [
-            'event_id' => $event->id,
+            'event_id'    => $event->id,
             'event_title' => $event->title,
-            'members' => $members,
+            'members'     => $members->items(), // sirf list
+            'pagination'  => [
+                'current_page' => $members->currentPage(),
+                'per_page'     => $members->perPage(),
+                'total'        => $members->total(),
+                'last_page'    => $members->lastPage(),
+            ],
         ]);
     } catch (\Exception $e) {
         return $this->sendError('Failed to fetch event members', ['error' => $e->getMessage()], 500);
     }
 }
 
+
 public function getUserEventPolls(Request $request)
 {
     try {
+        $perPage=$request->get('per_page',10);
         $user = auth()->user();
         $eventId = $request->input('event_id');
 
@@ -465,13 +470,14 @@ public function getUserEventPolls(Request $request)
             'posts.comments.replies',
             'posts.comments.user',
             'posts.comments.replies.user',
-        ]);
+        ])
+        ->paginate($perPage);
 
         if ($eventId) {
             $eventsQuery->where('id', $eventId);
         }
 
-        $events = $eventsQuery->get();
+        $events = $eventsQuery;
 
         return $this->sendResponse('User event polls & posts fetched successfully', $events);
     } catch (\Exception $e) {
