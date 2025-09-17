@@ -341,7 +341,8 @@ public function index()
         if (!$event)
             return $this->sendError("Event not found", [], 404);
 
-        $membersExceptHost = $event->members->filter(fn($m) => $m->role !== 'host')->map(function ($m) {
+        $membersExceptHost = $event->members->filter(fn($m) => $m->role !== 'host' && $m->user !==null)
+        ->map(function ($m) {
             return [
                 'user_id' => $m->user->id,
                 'name' => $m->user->first_name . ' ' . $m->user->last_name,
