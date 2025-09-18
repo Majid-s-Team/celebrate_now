@@ -140,8 +140,9 @@ class EventController extends Controller
 public function index(Request $request)
 {
     $perPage = $request->get("per_page", 10);
+    $search  = $request->get("search"); // 🔹 search param get kiya
 
-    $events = Event::with([
+    $eventsQuery = Event::with([
         'creator:id,first_name,last_name,email,profile_image',
         'category',
         'members.user:id,first_name,last_name,profile_image',
@@ -153,52 +154,60 @@ public function index(Request $request)
         'posts.comments.likes',                                // Likes on comments
         'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
         'posts.comments.replies.likes'                         // Likes on replies
-    ])
-    ->paginate($perPage)
-    ->through(function ($event) {
-        // Count total posts
-        $event->total_posts = $event->posts->count();
+    ]);
 
-        // Iterate over posts and add counts for likes, comments, and replies
-        $event->posts = $event->posts->map(function ($post) {
-            $post->likes_count = $post->likes->count();
-            $post->comments_count = $post->comments->count();
+    // 🔹 Search filter
+    if (!empty($search)) {
+        $eventsQuery->where(function ($query) use ($search) {
+            $query->where("description", "LIKE", "%{$search}%")
+                  ->orWhere("title", "LIKE", "%{$search}%");
+        });
+    }
 
-            $post->comments = $post->comments->map(function ($comment) {
-                $comment->likes_count = $comment->likes->count();
-                $comment->replies_count = $comment->replies->count();
+    $events = $eventsQuery->paginate($perPage)
+        ->through(function ($event) {
+            // Count total posts
+            $event->total_posts = $event->posts->count();
 
-                $comment->replies = $comment->replies->map(function ($reply) {
-                    $reply->likes_count = $reply->likes->count();
-                    return $reply;
+            // Iterate over posts and add counts for likes, comments, and replies
+            $event->posts = $event->posts->map(function ($post) {
+                $post->likes_count = $post->likes->count();
+                $post->comments_count = $post->comments->count();
+
+                $post->comments = $post->comments->map(function ($comment) {
+                    $comment->likes_count = $comment->likes->count();
+                    $comment->replies_count = $comment->replies->count();
+
+                    $comment->replies = $comment->replies->map(function ($reply) {
+                        $reply->likes_count = $reply->likes->count();
+                        return $reply;
+                    });
+
+                    return $comment;
                 });
 
-                return $comment;
+                return $post;
             });
 
-            return $post;
+            return $event;
         });
-
-        return $event;
-    });
 
     return $this->sendResponse("Events fetched successfully", $events);
 }
 
 
 
+
     // Show single event
     public function show(Request $request,$id)
     {
-        $perPage = $request->get('per_page', default: 10);
         $event = Event::with([
             'creator:id,first_name,last_name,email,profile_image',
             'category',
             'members.user:id,first_name,last_name,profile_image',
             'polls.candidates.candidate:id,first_name,last_name,profile_image',
             'polls.votes'
-        ])->find($id)
-        ->paginate($perPage);
+        ])->find($id);
 
         if (!$event) {
             return $this->sendError("Event not found", [], 404);

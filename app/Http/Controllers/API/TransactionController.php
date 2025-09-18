@@ -139,9 +139,11 @@ class TransactionController extends Controller
         try {
             $user = auth()->user();
             $event = Event::findOrFail($eventId);
+            $dateTime = $request->date_time;
 
             $totalDonated = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
+                ->whereDate('created_at',$dateTime)
                 ->sum('coins');
 
             $targetAmount = $event->donation_goal ?? 0;
@@ -247,7 +249,7 @@ class TransactionController extends Controller
         try {
             $user = auth()->user();
 
-            $type = $request->query('type', 'sent'); 
+            $type = $request->query('type', 'sent');
             $postId = $request->query('post_id');
 
             $query = CoinTransaction::with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'post:id,caption,user_id'])
