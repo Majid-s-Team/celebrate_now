@@ -137,8 +137,10 @@ class EventController extends Controller
     }
 
     // List all events
-public function index()
+public function index(Request $request)
 {
+    $perPage = $request->get("per_page", 10);
+
     $events = Event::with([
         'creator:id,first_name,last_name,email,profile_image',
         'category',
@@ -151,32 +153,22 @@ public function index()
         'posts.comments.likes',                                // Likes on comments
         'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
         'posts.comments.replies.likes'                         // Likes on replies
-    ])->get();
-
-    // Iterate over the events and add counts for posts, likes, comments, and replies
-    $events = $events->map(function ($event) {
+    ])
+    ->paginate($perPage)
+    ->through(function ($event) {
         // Count total posts
         $event->total_posts = $event->posts->count();
 
         // Iterate over posts and add counts for likes, comments, and replies
         $event->posts = $event->posts->map(function ($post) {
-            // Count likes for the post
             $post->likes_count = $post->likes->count();
-
-            // Count comments for the post
             $post->comments_count = $post->comments->count();
 
-            // Iterate over comments and add counts for replies and likes
             $post->comments = $post->comments->map(function ($comment) {
-                // Count likes for the comment
                 $comment->likes_count = $comment->likes->count();
-
-                // Count replies for the comment
                 $comment->replies_count = $comment->replies->count();
 
-                // Iterate over replies and add likes count
                 $comment->replies = $comment->replies->map(function ($reply) {
-                    // Count likes for each reply
                     $reply->likes_count = $reply->likes->count();
                     return $reply;
                 });
@@ -194,16 +186,19 @@ public function index()
 }
 
 
+
     // Show single event
-    public function show($id)
+    public function show(Request $request,$id)
     {
+        $perPage = $request->get('per_page', default: 10);
         $event = Event::with([
             'creator:id,first_name,last_name,email,profile_image',
             'category',
             'members.user:id,first_name,last_name,profile_image',
             'polls.candidates.candidate:id,first_name,last_name,profile_image',
             'polls.votes'
-        ])->find($id);
+        ])->find($id)
+        ->paginate($perPage);
 
         if (!$event) {
             return $this->sendError("Event not found", [], 404);
@@ -343,7 +338,8 @@ public function index()
         if (!$event)
             return $this->sendError("Event not found", [], 404);
 
-        $membersExceptHost = $event->members->filter(fn($m) => $m->role !== 'host')->map(function ($m) {
+        $membersExceptHost = $event->members->filter(fn($m) => $m->role !== 'host' && $m->user !==null)
+        ->map(function ($m) {
             return [
                 'user_id' => $m->user->id,
                 'name' => $m->user->first_name . ' ' . $m->user->last_name,
@@ -386,7 +382,7 @@ public function index()
             return $this->sendError('You are not authorized to view posts of this event.', [], 403);
         }
 
-        $perPage = $request->get('per_page', 10);
+        $perPage = $request->get('per_page', default: 10);
 
         $posts = Post::where('event_id', $eventId)
             ->with(['user', 'media', 'likes', 'comments.user', 'comments.replies.user'])
@@ -405,30 +401,44 @@ public function index()
         return $this->sendResponse('Event posts fetched successfully', $posts);
     }
 
-public function getEventMembers($eventId)
+public function getEventMembers(Request $request, $eventId)
 {
     try {
-        $event = Event::with(['members.user'])->findOrFail($eventId);
+        $perPage = $request->get("per_page", 10);
 
-        $members = $event->members->map(function ($member) {
-            return [
-                'id' => $member->id,
-                'role' => $member->role,
-                'status' => $member->status,
-                'user' => [
-                    'id' => $member->user->id,
-                    'first_name' => $member->user->first_name,
-                    'last_name' => $member->user->last_name,
-                    'email' => $member->user->email,
-                    'profile_image' => $member->user->profile_image,
-                ],
-            ];
-        });
+        $event = Event::select("id", "title")->findOrFail($eventId);
 
+        // Paginate members from DB
+        $members = EventMember::with("user")
+            ->where("event_id", $eventId)
+            ->whereHas("user") // sirf woh members jinke paas user ho
+            ->paginate($perPage)
+            ->through(function ($member) {
+                return [
+                    'id' => $member->id,
+                    'role' => $member->role,
+                    'status' => $member->status,
+                    'user' => [
+                        'id' => $member->user->id,
+                        'first_name' => $member->user->first_name,
+                        'last_name' => $member->user->last_name,
+                        'email' => $member->user->email,
+                        'profile_image' => $member->user->profile_image,
+                    ],
+                ];
+            });
+
+        // custom pagination used as the members are derived through the event not directly through the query
         return $this->sendResponse('Event members fetched successfully', [
-            'event_id' => $event->id,
+            'event_id'    => $event->id,
             'event_title' => $event->title,
-            'members' => $members,
+            'members'     => $members->items(), // sirf list
+            'pagination'  => [
+                'current_page' => $members->currentPage(),
+                'per_page'     => $members->perPage(),
+                'total'        => $members->total(),
+                'last_page'    => $members->lastPage(),
+            ],
         ]);
     } catch (\Exception $e) {
         return $this->sendError('Failed to fetch event members', ['error' => $e->getMessage()], 500);
@@ -439,6 +449,7 @@ public function getEventMembers($eventId)
 public function getUserEventPolls(Request $request)
 {
     try {
+        $perPage=$request->get('per_page',10);
         $user = auth()->user();
         $eventId = $request->input('event_id');
 
@@ -461,13 +472,14 @@ public function getUserEventPolls(Request $request)
             'posts.comments.replies',
             'posts.comments.user',
             'posts.comments.replies.user',
-        ]);
+        ])
+        ->paginate($perPage);
 
         if ($eventId) {
             $eventsQuery->where('id', $eventId);
         }
 
-        $events = $eventsQuery->get();
+        $events = $eventsQuery;
 
         return $this->sendResponse('User event polls & posts fetched successfully', $events);
     } catch (\Exception $e) {
@@ -510,4 +522,75 @@ public function deleteMember(Request $request)
 
 
 
+// public function getUserEventPolls(Request $request)
+// {
+//     try {
+//         $user = auth()->user();
+//         $eventId = $request->input('event_id');
+
+//         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
+//             $q->where('user_id', $user->id);
+//         })
+//         ->with([
+//             'creator',
+//             'members.user',
+//             'polls.creator',
+//             'polls.options.addedBy',
+//             'polls.candidates.candidate',
+//             'polls.votes.voter',
+//             'polls.votes.candidate',
+//             'posts.user',
+//             'posts.media',
+//             'posts.category',
+//             'posts.tags',
+//             'posts.likes',
+//             'posts.comments.replies',
+//             'posts.comments.user',
+//             'posts.comments.replies.user',
+//         ]);
+
+//         if ($eventId) {
+//             $eventsQuery->where('id', $eventId);
+//         }
+
+//         // Get events with all relationships
+//         $events = $eventsQuery->get();
+
+//         // ✅ Optional: filter out members with no user
+//         $events->each(function ($event) {
+//             $event->members = $event->members
+//                 ->filter(fn($member) => $member->user !== null)
+//                 ->values();
+//         });
+
+//         // ✅ Optional: Filter polls where creator is not null
+//         $events->each(function ($event) {
+//             $event->polls = $event->polls
+//                 ->filter(fn($poll) => $poll->creator !== null)
+//                 ->values();
+//         });
+
+//         // ✅ Optional: Filter posts where user exists
+//         $events->each(function ($event) {
+//             $event->posts = $event->posts
+//                 ->filter(fn($post) => $post->user !== null)
+//                 ->each(function ($post) {
+//                     $post->comments = $post->comments
+//                         ->filter(fn($comment) => $comment->user !== null)
+//                         ->each(function ($comment) {
+//                             $comment->replies = $comment->replies
+//                                 ->filter(fn($reply) => $reply->user !== null)
+//                                 ->values();
+//                         })
+//                         ->values();
+//                 })
+//                 ->values();
+//         });
+
+//         return $this->sendResponse('User event polls & posts fetched successfully', $events);
+//     } catch (\Exception $e) {
+//         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
+//     }
 }
+
+

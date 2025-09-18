@@ -127,8 +127,11 @@ class PollController extends Controller
         }
 
         $results = $event->polls->map(function ($poll) {
-            $candidates = $poll->candidates->map(function ($c) use ($poll) {
-                $votes = $poll->votes->where('candidate_id', $c->candidate_id);
+            $candidates = $poll->candidates
+            ->filter(fn($c) => $c->candidate !== null)
+            ->map(function ($c) use ($poll) {
+                $votes = $poll->votes->where('candidate_id', $c->candidate_id)
+                 ->filter(fn($v) => $v->voter !== null);;
 
                 return [
                     'candidate_id' => $c->candidate_id,
@@ -143,9 +146,9 @@ class PollController extends Controller
                             'email' => $v->voter->email,
                             'profile_image' => $v->voter->profile_image,
                         ];
-                    }),
+                    })->values(),
                 ];
-            });
+            })->values();
 
             // voters who didn’t vote
             $allCandidates = $poll->candidates->pluck('candidate_id');

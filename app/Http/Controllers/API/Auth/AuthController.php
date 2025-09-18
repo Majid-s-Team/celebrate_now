@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API\Auth;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Models\UserBlock;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use App\Models\UserOtp;
@@ -229,7 +230,43 @@ class AuthController extends Controller
 
         return $this->sendResponse('Account deactivated');
     }
+  public function block(Request $request){
+         $user = auth()->user();
 
+          $request->validate([
+            'blocked_id' => 'required|exists:users,id|different:' . $user->id,
+        ]);
+
+        $blockerId = $user->id;
+        $blockedId = $request->blocked_id;
+
+         if($blockerId == $blockedId){
+                  return $this->sendResponse('User Cannot Block himself');
+
+            }
+        //chech if user already exist in userblocks table
+        $existingBlocks = UserBlock::where('blocker_id',$blockerId)
+                                    ->where('blocked_id',$blockedId)
+                                    ->first();
+
+        if($existingBlocks){
+        // User already blocked → unblock now
+        $existingBlocks -> delete();
+         return $this->sendResponse('User unblocked successfully.');
+        }
+        else{
+            UserBlock::create(['blocker_id'=>$blockerId,
+            'blocked_id'=>$blockedId]);
+             return $this->sendResponse('User blocked successfully.');
+        }
+
+    }
+
+    public function viewBlockList(){
+        $user = auth()->user();
+        $userBlocks = UserBlock::where('blocker_id',$user->id)->get();
+        return $this->sendResponse('User Blocked List', [$userBlocks], 200);
+    }
     public function softDeleteUser(Request $request, $userId)
     {
         try {

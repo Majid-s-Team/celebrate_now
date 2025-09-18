@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+
 class Event extends Model
 {
     use HasFactory, SoftDeletes;
@@ -19,6 +20,9 @@ class Event extends Model
 
     ];
 
+    public function user(){
+        return $this->hasMany(User::class);
+    }
     public function category()
     {
         return $this->belongsTo(EventCategory::class, 'event_type_id');
@@ -65,11 +69,11 @@ class Event extends Model
     {
         return $this->belongsTo(Event::class);
     }
-    
+
     // public function surpriseContributions()
     // {
     //     return $this->hasMany(CoinTransaction::class, 'event_id')
-    //         ->where('type', 'send'); 
+    //         ->where('type', 'send');
     // }
 public function surpriseContributions()
     {

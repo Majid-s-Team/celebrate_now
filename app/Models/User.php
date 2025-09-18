@@ -8,10 +8,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Traits\ExcludeBlockedUsersScope;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes,ExcludeBlockedUsersScope;
 
     protected $fillable = [
         'first_name',
@@ -86,5 +87,14 @@ public function receivedTransactions()
     return $this->hasMany(CoinTransaction::class, 'receiver_id');
 }
 
+ public function blockedUsers()
+{
+    return $this->hasMany(UserBlock::class, 'blocker_id');
+}
+
+public function blockers()
+{
+    return $this->hasMany(UserBlock::class, 'blocked_id');
+}
 
 }

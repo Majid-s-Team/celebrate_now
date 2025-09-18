@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Traits\ExcludeBlockedUsersScope;
 
 class CommentLike extends Model
 {
-    use HasFactory;
+    use HasFactory,ExcludeBlockedUsersScope;
 
     protected $fillable = ['comment_id', 'user_id'];
 
