@@ -38,7 +38,7 @@ class WalletController extends Controller
 
         $event = Event::with([
             'creator:id,first_name,last_name',
-            'donations.user:id,first_name,last_name',
+            'donationContributions.sender:id,first_name,last_name',
             'surpriseContributions.sender:id,first_name,last_name'
         ])->find($eventId);
 
@@ -142,23 +142,23 @@ public function listWithSurpriseContributionsAndTotal(Request $request)
         }
 
         // Fetching surprise contributors
-        $surpriseContributors = [];
-        $totalSurpriseAmount = 0; // Variable to store total surprise contribution amount
+        $surpriseContributors = collect(); // start with empty collection
+        $totalSurpriseAmount = 0;
 
         if ($event->surprise_contribution) {
             $surpriseContributors = $event->surpriseContributions->map(function ($tx) use (&$totalSurpriseAmount) {
-                $totalSurpriseAmount += $tx->coins; // Add each surprise contribution amount
+                $totalSurpriseAmount += $tx->coins;
                 return [
-                    'user_id' => $tx->sender->id,
-                    'name' => $tx->sender->first_name . ' ' . $tx->sender->last_name,
-                    'amount' => $tx->coins,
+                    'user_id'    => $tx->sender->id,
+                    'name'       => $tx->sender->first_name . ' ' . $tx->sender->last_name,
+                    'amount'     => $tx->coins,
                     'created_at' => $tx->created_at->toDateTimeString(),
                 ];
             });
         }
 
         // If no surprise contributions, return an empty array
-        if (empty($surpriseContributors)) {
+        if ($surpriseContributors->isEmpty()) {
             return $this->sendResponse('No surprise contributions found', []);
         }
 
@@ -166,7 +166,7 @@ public function listWithSurpriseContributionsAndTotal(Request $request)
         $data = [
             'event_id'              => $event->id,
             'title'                 => $event->title,
-            'total_surprise_amount' => $totalSurpriseAmount,  // Total amount for surprise contributions
+            'total_surprise_amount' => $totalSurpriseAmount,
             'surprise_contributors' => $surpriseContributors,
         ];
 
@@ -176,6 +176,7 @@ public function listWithSurpriseContributionsAndTotal(Request $request)
         return $this->sendError('Something went wrong', [$e->getMessage()], 500);
     }
 }
+
 
 
 }
