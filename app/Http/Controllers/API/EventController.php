@@ -239,7 +239,9 @@ public function index(Request $request)
             'poll_date' => 'nullable|date',
             'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
             'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
-            'donation_deadline' => 'nullable|date|after:date',
+            'donation_deadline' => 'nullable|date|after:date'
+            // 'contribution_from_members' => 'nullable|array',
+            // 'contribution_from_members.*'=>'exists:users,id'
         ]);
 
         DB::beginTransaction();
@@ -254,7 +256,7 @@ public function index(Request $request)
             } else {
 
                 $event->donation_goal = null;
-                $event->contribution_from_members = false;
+                // $event->contribution_from_members = false;
                 $event->donation_deadline = null;
                 $event->save();
             }
