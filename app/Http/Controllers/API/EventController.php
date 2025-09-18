@@ -140,7 +140,7 @@ class EventController extends Controller
 public function index(Request $request)
 {
     $perPage = $request->get("per_page", 10);
-    $search  = $request->get("search"); // 🔹 search param get kiya
+    $search  = $request->get(key: "search"); // 🔹 search param get kiya
 
     $eventsQuery = Event::with([
         'creator:id,first_name,last_name,email,profile_image',
