@@ -39,7 +39,7 @@ class WalletController extends Controller
         $event = Event::with([
             'creator:id,first_name,last_name',
             'donationContributions.sender:id,first_name,last_name',
-            'surpriseContributions.sender:id,first_name,last_name'
+            // 'surpriseContributions.sender:id,first_name,last_name'
         ])->find($eventId);
 
         if (!$event) {
@@ -72,6 +72,7 @@ class WalletController extends Controller
                     'user_id' => $d->user->id,
                     'name' => $d->user->first_name . ' ' . $d->user->last_name,
                     'amount' => $d->amount,
+                    'profile_image' => $d->user->profile_image,
                     'created_at' => $d->created_at->toDateTimeString(),
                 ];
             });
@@ -84,6 +85,7 @@ class WalletController extends Controller
                         'user_id' => $d->user->id,
                         'name' => $d->user->first_name . ' ' . $d->user->last_name,
                         'amount' => $d->amount,
+                        'profile_image' => $d->user->profile_image,
                         'created_at' => $d->created_at->toDateTimeString(),
                     ];
                 })
@@ -92,11 +94,13 @@ class WalletController extends Controller
 
         $surpriseContributors = [];
         if ($event->surprise_contribution) {
+
             $surpriseContributors = $event->surpriseContributions->map(function ($tx) {
                 return [
                     'user_id' => $tx->sender->id,
                     'name' => $tx->sender->first_name . ' ' . $tx->sender->last_name,
                     'amount' => $tx->coins,
+                    'profile_image' => $tx->sender->profile_image,
                     'created_at' => $tx->created_at->toDateTimeString(),
                 ];
             });
@@ -134,7 +138,7 @@ public function listWithSurpriseContributionsAndTotal(Request $request)
 
         $event = Event::with([
             'creator:id,first_name,last_name',
-            'surpriseContributions.sender:id,first_name,last_name'
+            'surpriseContributions.sender:id,first_name,last_name,profile_image'
         ])->find($eventId);
 
         if (!$event) {
@@ -152,6 +156,7 @@ public function listWithSurpriseContributionsAndTotal(Request $request)
                     'user_id'    => $tx->sender->id,
                     'name'       => $tx->sender->first_name . ' ' . $tx->sender->last_name,
                     'amount'     => $tx->coins,
+                    'profile_image' => $tx->sender->profile_image,
                     'created_at' => $tx->created_at->toDateTimeString(),
                 ];
             });
