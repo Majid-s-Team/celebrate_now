@@ -23,6 +23,7 @@ class PollController extends Controller
         $data = $request->validate([
             'poll_id' => 'required|exists:polls,id',
             'candidate_id' => 'required',
+            'poll_option_id'=>'required|exists:poll_options,id'
         ]);
 
         $poll = Poll::with('candidates')->find($data['poll_id']);
@@ -76,6 +77,7 @@ class PollController extends Controller
                     'poll_id' => $poll->id,
                     'voter_id' => $user->id,
                     'candidate_id' => $cid,
+                    'poll_option_id' =>$data['poll_option_id']
                 ]);
             }
         }
@@ -119,60 +121,72 @@ class PollController extends Controller
         return $this->sendResponse('All polls fetched successfully', $polls);
     }
 
-    public function eventPollResults($eventId)
-    {
-        $event = Event::with(['polls.candidates.candidate', 'polls.votes.voter'])->find($eventId);
-        if (!$event) {
-            return $this->sendError('Event not found', [], 404);
-        }
+public function eventPollResults($eventId)
+{
+    $event = Event::with(['polls.candidates.candidate', 'polls.votes.voter','polls.votes.option'])->find($eventId);
 
-        $results = $event->polls->map(function ($poll) {
-            $candidates = $poll->candidates
-            ->filter(fn($c) => $c->candidate !== null)
-            ->map(function ($c) use ($poll) {
-                $votes = $poll->votes->where('candidate_id', $c->candidate_id)
-                 ->filter(fn($v) => $v->voter !== null);;
-
-                return [
-                    'candidate_id' => $c->candidate_id,
-                    'name' => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                    'email' => $c->candidate->email,
-                    'profile_image' => $c->candidate->profile_image,
-                    'votes_count' => $votes->count(),
-                    'voters' => $votes->map(function ($v) {
-                        return [
-                            'id' => $v->voter->id,
-                            'name' => $v->voter->first_name . ' ' . $v->voter->last_name,
-                            'email' => $v->voter->email,
-                            'profile_image' => $v->voter->profile_image,
-                        ];
-                    })->values(),
-                ];
-            })->values();
-
-            // voters who didn’t vote
-            $allCandidates = $poll->candidates->pluck('candidate_id');
-            $votedUserIds = $poll->votes->pluck('voter_id');
-            $notVoted = User::whereIn('id', $allCandidates)
-                ->whereNotIn('id', $votedUserIds)
-                ->get(['id', 'first_name', 'last_name', 'email', 'profile_image']);
-
-            return [
-                'poll_id' => $poll->id,
-                'poll_date' => $poll->poll_date,
-                'status' => $poll->status,
-                'candidates' => $candidates,
-                'not_voted' => $notVoted,
-                'total_votes' => $poll->votes->count(),
-            ];
-        });
-
-        return $this->sendResponse('Event poll results fetched successfully', [
-            'event_id' => $event->id,
-            'event_title' => $event->title,
-            'polls' => $results,
-        ]);
+    if (!$event) {
+        return $this->sendError('Event not found', [], 404);
     }
+
+    $results = $event->polls->map(function ($poll) {
+        $votes = $poll->candidates
+            ->filter(fn($c) => $c->candidate !== null) // sirf valid candidate
+            ->map(function ($c) use ($poll) {
+                // us candidate ke votes
+                $candidateVotes = $poll->votes
+                    ->where('candidate_id', $c->candidate_id)
+                    ->filter(fn($v) => $v->voter !== null);
+
+                if ($candidateVotes->count() > 0) {
+                    // agar vote mila hai to har vote entry dikhaye
+                    return $candidateVotes->map(function ($v) use ($c) {
+                        return [
+                            'candidate_id'    => $c->candidate_id,
+                            'voter_id'        => $v->voter_id,
+                            'name'            => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                            'email'           => $c->candidate->email,
+                            'profile_image'   => $c->candidate->profile_image,
+                            'votes_count'     => 1, // ek ek vote
+                            'option_text' => $v->option->option_text ?? null,
+                            'poll_option_id'=>$v->option->id ?? null,
+                        ];
+                    })->values();
+                } else {
+                    // agar vote 0 hai to bhi entry dikhaye
+                    return collect([[
+                        'candidate_id'    => $c->candidate_id,
+                        'voter_id'        => null,
+                        'name'            => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                        'email'           => $c->candidate->email,
+                        'profile_image'   => $c->candidate->profile_image,
+                        'votes_count'     => 0,
+                        'option_text' => null,
+                        'poll_option_id'=>null,
+
+                    ]]);
+                }
+            })
+            ->flatten(1)
+            ->values();
+
+        return [
+            'poll_id'     => $poll->id,
+            'poll_date'   => $poll->poll_date,
+            'status'      => $poll->status,
+            'votes'       => $votes,
+            'total_votes' => $poll->votes->count(),
+        ];
+    });
+
+    return $this->sendResponse('Event poll results fetched successfully', [
+        'event_id'    => $event->id,
+        'event_title' => $event->title,
+        'polls'       => $results,
+    ]);
+}
+
+
 
     public function createPoll(Request $request)
     {
