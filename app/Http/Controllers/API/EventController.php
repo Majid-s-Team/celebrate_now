@@ -150,12 +150,14 @@ public function index(Request $request)
         'polls.candidates.candidate:id,first_name,last_name,profile_image',
         'polls.votes',
         'posts.user:id,first_name,last_name,profile_image',    // Posts and the user who posted them
-        'posts.likes',                                         // Likes on posts
+        'posts.likes',
+        'posts.likes.user:id,first_name,last_name,profile_image',                                       // Likes on posts
         'posts.comments.user:id,first_name,last_name,profile_image',  // Comments and the users who commented
-        'posts.comments.likes',                                // Likes on comments
+        'posts.comments.likes',
+        'posts.comments.likes.user:id,first_name,last_name,profile_image',                                // Likes on comments
         'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
         'posts.comments.replies.likes'                         // Likes on replies
-    ]);
+    ]) ->latest();
 
     // 🔹 Search filter
     if (!empty($search)) {
@@ -378,38 +380,62 @@ public function index(Request $request)
         return $this->sendResponse([], 'Event deleted successfully');
     }
 
-    public function eventPosts($eventId, Request $request)
-    {
-        $event = Event::findOrFail($eventId);
+   public function eventPosts($eventId, Request $request)
+{
+    $event = Event::findOrFail($eventId);
 
+    $isMember = EventMember::where('event_id', $eventId)
+        ->where('user_id', auth()->id())
+        ->where('status', 'joined')
+        ->exists();
 
-        $isMember = EventMember::where('event_id', $eventId)
-            ->where('user_id', auth()->id())
-            ->where('status', 'joined')
-            ->exists();
+    if (!$isMember) {
+        return $this->sendError('You are not authorized to view posts of this event.', [], 403);
+    }
 
-        if (!$isMember) {
-            return $this->sendError('You are not authorized to view posts of this event.', [], 403);
-        }
+    $perPage = $request->get('per_page', 10);
 
-        $perPage = $request->get('per_page', default: 10);
+    $posts = Post::where('event_id', $eventId)
+        ->with([
+            'user',
+            'media',
+            'tags',
+            'tags.user',
+            'likes',
+            'likes.user',
+            'comments.likes',
+            'comments.likes.user',
+            'comments.user',
+            'comments.replies.user',
+            'comments.replies.likes'
+        ])
+        ->latest()
+        ->paginate($perPage);
 
-        $posts = Post::where('event_id', $eventId)
-            ->with(['user', 'media','tags','tags.user', 'likes','likes.user', 'comments.likes','comments.likes.user','comments.user', 'comments.replies.user'])
-            ->latest()
-            ->paginate($perPage);
+    $posts->getCollection()->transform(function ($post) {
+        $post->is_liked = $post->likes->contains('user_id', auth()->id());
+        $post->likes_count = $post->likes->count();
+        $post->comments_count = $post->comments->count();
 
-        $posts->getCollection()->transform(function ($post) {
-            $post->is_liked = $post->likes->contains('user_id', auth()->id());
-            $post->comments->transform(function ($comment) {
-                $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
-                return $comment;
+        $post->comments->transform(function ($comment) {
+            $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+            $comment->likes_count = $comment->likes->count();
+            $comment->replies_count = $comment->replies->count();
+
+            $comment->replies->transform(function ($reply) {
+                $reply->likes_count = $reply->likes->count();
+                return $reply;
             });
-            return $post;
+
+            return $comment;
         });
 
-        return $this->sendResponse('Event posts fetched successfully', $posts);
-    }
+        return $post;
+    });
+
+    return $this->sendResponse('Event posts fetched successfully', $posts);
+}
+
 
 public function getEventMembers(Request $request, $eventId)
 {
@@ -459,7 +485,7 @@ public function getEventMembers(Request $request, $eventId)
 public function getUserEventPolls(Request $request)
 {
     try {
-        $perPage=$request->get('per_page',10);
+        $perPage = $request->get('per_page', 10);
         $user = auth()->user();
         $eventId = $request->input('event_id');
 
@@ -479,23 +505,55 @@ public function getUserEventPolls(Request $request)
             'posts.category',
             'posts.tags',
             'posts.likes',
+            'posts.likes.user',
+            'posts.comments.likes',
+            'posts.comments.likes.user',
             'posts.comments.replies',
             'posts.comments.user',
             'posts.comments.replies.user',
-        ])
-        ->paginate($perPage);
+            'posts.comments.replies.likes',
+        ]);
 
         if ($eventId) {
             $eventsQuery->where('id', $eventId);
         }
 
-        $events = $eventsQuery;
+        $events = $eventsQuery->paginate($perPage)
+            ->through(function ($event) {
+                // Add total posts count
+                $event->total_posts = $event->posts->count();
+
+                // Loop through posts and add counts
+                $event->posts = $event->posts->map(function ($post) {
+                    $post->is_liked = $post->likes->contains('user_id', auth()->id());
+                    $post->likes_count = $post->likes->count();
+                    $post->comments_count = $post->comments->count();
+
+                    $post->comments = $post->comments->map(function ($comment) {
+                        $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+                        $comment->likes_count = $comment->likes->count();
+                        $comment->replies_count = $comment->replies->count();
+
+                        $comment->replies = $comment->replies->map(function ($reply) {
+                            $reply->likes_count = $reply->likes->count();
+                            return $reply;
+                        });
+
+                        return $comment;
+                    });
+
+                    return $post;
+                });
+
+                return $event;
+            });
 
         return $this->sendResponse('User event polls & posts fetched successfully', $events);
     } catch (\Exception $e) {
         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
     }
 }
+
 
 public function deleteMember(Request $request)
 {
