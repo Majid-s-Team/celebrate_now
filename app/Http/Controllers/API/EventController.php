@@ -394,7 +394,7 @@ public function index(Request $request)
         $perPage = $request->get('per_page', default: 10);
 
         $posts = Post::where('event_id', $eventId)
-            ->with(['user', 'media', 'likes', 'comments.user', 'comments.replies.user'])
+            ->with(['user', 'media','tags','tags.user', 'likes','likes.user', 'comments.likes','comments.likes.user','comments.user', 'comments.replies.user'])
             ->latest()
             ->paginate($perPage);
 

@@ -16,7 +16,7 @@ use App\Models\PollMemberOption;
 
 class PollController extends Controller
 {
-    public function vote(Request $request)
+     public function vote(Request $request)
     {
         $user = $request->user();
 
@@ -84,6 +84,7 @@ class PollController extends Controller
 
         return $this->sendResponse('Vote(s) processed successfully', $votes, 200);
     }
+
 
 
 
