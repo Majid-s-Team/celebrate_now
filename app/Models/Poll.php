@@ -10,7 +10,7 @@ class Poll extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['event_id', 'created_by', 'status', 'poll_date', 'question', 'allow_member_add_option', 'allow_multiple_selection'];
+    protected $fillable = ['event_id', 'created_by', 'status', 'poll_date', 'question','auto_poll', 'allow_member_add_option', 'allow_multiple_selection'];
 
     protected static function boot()
     {

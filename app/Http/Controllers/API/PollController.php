@@ -13,45 +13,72 @@ use App\Models\PollVote;
 use App\Models\EventMember;
 use App\Models\PollOption;
 use App\Models\PollMemberOption;
+use Illuminate\Validation\Rule;
+
+
 
 class PollController extends Controller
 {
-     public function vote(Request $request)
-    {
-        $user = $request->user();
+public function vote(Request $request)
+{
+    $user = $request->user();
 
-        $data = $request->validate([
-            'poll_id' => 'required|exists:polls,id',
-            'candidate_id' => 'required',
-            'poll_option_id'=>'required|exists:poll_options,id'
-        ]);
+    // Poll find karo
+    $poll = Poll::with('candidates', 'event')->find($request->poll_id);
 
-        $poll = Poll::with('candidates')->find($data['poll_id']);
-        if (!$poll) {
-            return $this->sendError('Poll not found', [], 404);
-        }
-        if ($poll->status !== 'active') {
-            return $this->sendError('Poll is closed', [], 400);
-        }
+    if (!$poll) {
+        return $this->sendError('Poll not found', [], 404);
+    }
+    if ($poll->status !== 'active') {
+        return $this->sendError('Poll is closed', [], 400);
+    }
 
-        $isMember = EventMember::where('event_id', $poll->event_id)
-            ->where('user_id', $user->id)
-            ->exists();
-        if (!$isMember) {
-            return $this->sendError('Only event members can vote', [], 403);
-        }
+    // Event nikaal lo
+    $event = $poll->event;
+    $eventId = $event->id;
 
+    // Base rules
+    $rules = [
+        'poll_id' => 'required|exists:polls,id',
+    ];
 
+    $countPolls = Poll::where('event_id', $eventId)->count();
+    // dd(vars: $poll->auto_poll);
+    $isGroupVote = ($event->mode == 'physical' && $event->physical_type == 'group_vote' && $poll->auto_poll===1);
+
+    if ($isGroupVote) {
+        $rules['candidate_id'] = 'required';
+    } else {
+        $rules['poll_option_id'] = [
+            'required',
+            Rule::exists(PollOption::class, 'id')
+                ->where('poll_id', $poll->id),
+        ];
+    }
+
+    $data = $request->validate($rules);
+
+    // Check member
+    $isMember = EventMember::where('event_id', $poll->event_id)
+        ->where('user_id', $user->id)
+        ->exists();
+
+    if (!$isMember) {
+        return $this->sendError('Only event members can vote', [], 403);
+    }
+
+    $votes = [];
+
+    if ($isGroupVote) {
+        // Candidate vote logic
         $candidateIds = is_array($data['candidate_id'])
             ? $data['candidate_id']
             : [$data['candidate_id']];
-
 
         if (!$poll->allow_multiple_selection && count($candidateIds) > 1) {
             return $this->sendError('This poll allows only one selection', [], 400);
         }
 
-        $votes = [];
         foreach ($candidateIds as $cid) {
             $isCandidate = PollCandidate::where('poll_id', $poll->id)
                 ->where('candidate_id', $cid)
@@ -61,29 +88,43 @@ class PollController extends Controller
                 return $this->sendError("Invalid candidate ID: {$cid}", [], 400);
             }
 
-
             $existingVote = PollVote::where('poll_id', $poll->id)
                 ->where('voter_id', $user->id)
                 ->where('candidate_id', $cid)
                 ->first();
 
             if ($existingVote) {
-
                 $existingVote->delete();
                 $votes[] = ['candidate_id' => $cid, 'status' => 'removed'];
             } else {
-
                 $votes[] = PollVote::create([
-                    'poll_id' => $poll->id,
-                    'voter_id' => $user->id,
+                    'poll_id'      => $poll->id,
+                    'voter_id'     => $user->id,
                     'candidate_id' => $cid,
-                    'poll_option_id' =>$data['poll_option_id']
                 ]);
             }
         }
+    } else {
+        // Poll option vote logic
+        $existingVote = PollVote::where('poll_id', $poll->id)
+            ->where('voter_id', $user->id)
+            ->first();
 
-        return $this->sendResponse('Vote(s) processed successfully', $votes, 200);
+        if ($existingVote) {
+            $existingVote->delete();
+            $votes[] = ['poll_option_id' => $data['poll_option_id'], 'status' => 'removed'];
+        } else {
+            $votes[] = PollVote::create([
+                'poll_id'        => $poll->id,
+                'voter_id'       => $user->id,
+                'poll_option_id' => $data['poll_option_id'],
+            ]);
+        }
     }
+
+    return $this->sendResponse('Vote(s) processed successfully', $votes, 200);
+}
+
 
 
 

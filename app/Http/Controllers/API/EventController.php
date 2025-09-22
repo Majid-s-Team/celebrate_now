@@ -115,6 +115,7 @@ class EventController extends Controller
                     'created_by' => $user->id,
                     'status' => 'active',
                     'question' => 'Who should host the event?',
+                    'auto_poll' => true,
                     'poll_date' => $data['poll_date'] ?? $event->date,
                 ]);
 
