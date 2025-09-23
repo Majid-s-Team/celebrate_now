@@ -13,44 +13,72 @@ use App\Models\PollVote;
 use App\Models\EventMember;
 use App\Models\PollOption;
 use App\Models\PollMemberOption;
+use Illuminate\Validation\Rule;
+
+
 
 class PollController extends Controller
 {
-    public function vote(Request $request)
-    {
-        $user = $request->user();
+public function vote(Request $request)
+{
+    $user = $request->user();
 
-        $data = $request->validate([
-            'poll_id' => 'required|exists:polls,id',
-            'candidate_id' => 'required',
-        ]);
+    // Poll find karo
+    $poll = Poll::with('candidates', 'event')->find($request->poll_id);
 
-        $poll = Poll::with('candidates')->find($data['poll_id']);
-        if (!$poll) {
-            return $this->sendError('Poll not found', [], 404);
-        }
-        if ($poll->status !== 'active') {
-            return $this->sendError('Poll is closed', [], 400);
-        }
+    if (!$poll) {
+        return $this->sendError('Poll not found', [], 404);
+    }
+    if ($poll->status !== 'active') {
+        return $this->sendError('Poll is closed', [], 400);
+    }
 
-        $isMember = EventMember::where('event_id', $poll->event_id)
-            ->where('user_id', $user->id)
-            ->exists();
-        if (!$isMember) {
-            return $this->sendError('Only event members can vote', [], 403);
-        }
+    // Event nikaal lo
+    $event = $poll->event;
+    $eventId = $event->id;
 
+    // Base rules
+    $rules = [
+        'poll_id' => 'required|exists:polls,id',
+    ];
 
+    $countPolls = Poll::where('event_id', $eventId)->count();
+    // dd(vars: $poll->auto_poll);
+    $isGroupVote = ($event->mode == 'physical' && $event->physical_type == 'group_vote' && $poll->auto_poll===1);
+
+    if ($isGroupVote) {
+        $rules['candidate_id'] = 'required';
+    } else {
+        $rules['poll_option_id'] = [
+            'required',
+            Rule::exists(PollOption::class, 'id')
+                ->where('poll_id', $poll->id),
+        ];
+    }
+
+    $data = $request->validate($rules);
+
+    // Check member
+    $isMember = EventMember::where('event_id', $poll->event_id)
+        ->where('user_id', $user->id)
+        ->exists();
+
+    if (!$isMember) {
+        return $this->sendError('Only event members can vote', [], 403);
+    }
+
+    $votes = [];
+
+    if ($isGroupVote) {
+        // Candidate vote logic
         $candidateIds = is_array($data['candidate_id'])
             ? $data['candidate_id']
             : [$data['candidate_id']];
-
 
         if (!$poll->allow_multiple_selection && count($candidateIds) > 1) {
             return $this->sendError('This poll allows only one selection', [], 400);
         }
 
-        $votes = [];
         foreach ($candidateIds as $cid) {
             $isCandidate = PollCandidate::where('poll_id', $poll->id)
                 ->where('candidate_id', $cid)
@@ -60,28 +88,44 @@ class PollController extends Controller
                 return $this->sendError("Invalid candidate ID: {$cid}", [], 400);
             }
 
-
             $existingVote = PollVote::where('poll_id', $poll->id)
                 ->where('voter_id', $user->id)
                 ->where('candidate_id', $cid)
                 ->first();
 
             if ($existingVote) {
-
                 $existingVote->delete();
                 $votes[] = ['candidate_id' => $cid, 'status' => 'removed'];
             } else {
-
                 $votes[] = PollVote::create([
-                    'poll_id' => $poll->id,
-                    'voter_id' => $user->id,
+                    'poll_id'      => $poll->id,
+                    'voter_id'     => $user->id,
                     'candidate_id' => $cid,
                 ]);
             }
         }
+    } else {
+        // Poll option vote logic
+        $existingVote = PollVote::where('poll_id', $poll->id)
+            ->where('voter_id', $user->id)
+            ->first();
 
-        return $this->sendResponse('Vote(s) processed successfully', $votes, 200);
+        if ($existingVote) {
+            $existingVote->delete();
+            $votes[] = ['poll_option_id' => $data['poll_option_id'], 'status' => 'removed'];
+        } else {
+            $votes[] = PollVote::create([
+                'poll_id'        => $poll->id,
+                'voter_id'       => $user->id,
+                'poll_option_id' => $data['poll_option_id'],
+            ]);
+        }
     }
+
+    return $this->sendResponse('Vote(s) processed successfully', $votes, 200);
+}
+
+
 
 
 
@@ -119,57 +163,100 @@ class PollController extends Controller
         return $this->sendResponse('All polls fetched successfully', $polls);
     }
 
-    public function eventPollResults($eventId)
-    {
-        $event = Event::with(['polls.candidates.candidate', 'polls.votes.voter'])->find($eventId);
-        if (!$event) {
-            return $this->sendError('Event not found', [], 404);
-        }
+public function eventPollResults($eventId)
+{
+    $event = Event::with([
+        'polls.candidates.candidate',
+        'polls.votes.voter',
+        'polls.votes.option',
+        'polls.options',
+    ])->find($eventId);
 
-        $results = $event->polls->map(function ($poll) {
-            $candidates = $poll->candidates->map(function ($c) use ($poll) {
-                $votes = $poll->votes->where('candidate_id', $c->candidate_id);
+    if (!$event) {
+        return $this->sendError('Event not found', [], 404);
+    }
+
+    $results = $event->polls->map(function ($poll) {
+        // check karo poll me candidates hain ya sirf options
+        if ($poll->candidates->count() > 0) {
+            // candidate-based poll
+            $votes = $poll->candidates
+                ->filter(fn($c) => $c->candidate !== null)
+                ->map(function ($c) use ($poll) {
+                    $candidateVotes = $poll->votes
+                        ->where('candidate_id', $c->candidate_id)
+                        ->filter(fn($v) => $v->voter !== null);
+
+                    $totalCandidateVotes = $candidateVotes->count(); // ✅ ek hi jagah count
+
+                    return [
+                        'candidate_id'   => $c->candidate_id,
+                        'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                        'email'          => $c->candidate->email,
+                        'profile_image'  => $c->candidate->profile_image,
+                        'votes_count'    => $totalCandidateVotes,
+                        'voters'         => $candidateVotes->map(fn($vote) => [
+                            'voter_id'      => $vote->voter_id,
+                            'name'          => $vote->voter->first_name . ' ' . $vote->voter->last_name,
+                            'email'         => $vote->voter->email,
+                            'profile_image' => $vote->voter->profile_image,
+                        ])->values(),
+                    ];
+                })
+                ->values();
+        } else {
+            // option-based poll
+            $votes = $poll->options->map(function ($opt) use ($poll) {
+                $optionVotes = $poll->votes
+                    ->where('poll_option_id', $opt->id)
+                    ->filter(fn($v) => $v->voter !== null);
 
                 return [
-                    'candidate_id' => $c->candidate_id,
-                    'name' => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                    'email' => $c->candidate->email,
-                    'profile_image' => $c->candidate->profile_image,
-                    'votes_count' => $votes->count(),
-                    'voters' => $votes->map(function ($v) {
-                        return [
-                            'id' => $v->voter->id,
-                            'name' => $v->voter->first_name . ' ' . $v->voter->last_name,
-                            'email' => $v->voter->email,
-                            'profile_image' => $v->voter->profile_image,
-                        ];
-                    }),
+                    'poll_option_id' => $opt->id,
+                    'option_text'    => $opt->option_text,
+                    'votes_count'    => $optionVotes->count(),
+                    'voters'         => $optionVotes->map(fn($v) => [
+                        'voter_id'      => $v->voter_id,
+                        'name'          => $v->voter->first_name . ' ' . $v->voter->last_name,
+                        'email'         => $v->voter->email,
+                        'profile_image' => $v->voter->profile_image,
+                    ])->values(),
                 ];
             });
+        }
 
-            // voters who didn’t vote
-            $allCandidates = $poll->candidates->pluck('candidate_id');
-            $votedUserIds = $poll->votes->pluck('voter_id');
-            $notVoted = User::whereIn('id', $allCandidates)
-                ->whereNotIn('id', $votedUserIds)
-                ->get(['id', 'first_name', 'last_name', 'email', 'profile_image']);
-
+        // poll ke saare options nikal lo
+        $options = $poll->options->map(function ($opt) {
             return [
-                'poll_id' => $poll->id,
-                'poll_date' => $poll->poll_date,
-                'status' => $poll->status,
-                'candidates' => $candidates,
-                'not_voted' => $notVoted,
-                'total_votes' => $poll->votes->count(),
+                'poll_option_id' => $opt->id,
+                'option_text'    => $opt->option_text,
+                'added_by'       => $opt->added_by,
             ];
         });
 
-        return $this->sendResponse('Event poll results fetched successfully', [
-            'event_id' => $event->id,
-            'event_title' => $event->title,
-            'polls' => $results,
-        ]);
-    }
+        return [
+            'poll_id'       => $poll->id,
+            'poll_caption'  => $poll->question,
+            'created_by'    => $poll->created_by,
+            'poll_end_date' => $poll->poll_date,
+            'created_at'    => $poll->created_at?->toDateString(),
+            'allow_member_add_option'   => (bool) $poll->allow_member_add_option,
+            'allow_multiple_selection'  => (bool) $poll->allow_multiple_selection,
+            'status'        => $poll->status,
+            'votes'         => $poll->votes->count() > 0 ? $votes : null,
+            'options'       => $options,
+            'total_votes'   => $poll->votes->count(),
+        ];
+    });
+
+    return $this->sendResponse('Event poll results fetched successfully', [
+        'event_id'    => $event->id,
+        'event_title' => $event->title,
+        'polls'       => $results,
+    ]);
+}
+
+
 
     public function createPoll(Request $request)
     {

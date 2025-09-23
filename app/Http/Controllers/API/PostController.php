@@ -83,6 +83,7 @@ class PostController extends Controller
                 ->where('status', 'joined')
                 ->whereIn('role', ['host', 'cohost'])
                 ->exists();
+        // dd($isHostOrCohost);
 
             if (!$isHostOrCohost) {
                 return $this->sendError('Only host or cohost can post in this event.', [], 403);
@@ -91,7 +92,7 @@ class PostController extends Controller
             $eventCategoryId = $event->event_type_id;
             $privacy = 'private';
         }
-
+// dd($request->event_id);
         $post = Post::create([
             'user_id' => auth()->id(),
             'caption' => $request->caption,
@@ -172,8 +173,8 @@ class PostController extends Controller
         $post->update([
             'caption' => $request->caption,
             'privacy' => $privacy,
-            'event_category_id' => $eventCategoryId,
-            'event_id' => $request->event_id,
+            // 'event_category_id' => $eventCategoryId,
+            // 'event_id' => $request->event_id,
         ]);
 
         if ($request->has('tag_user_ids')) {

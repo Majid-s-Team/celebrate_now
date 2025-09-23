@@ -5,11 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 
+
 class Poll extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['event_id', 'created_by', 'status', 'poll_date', 'question', 'allow_member_add_option', 'allow_multiple_selection'];
+    protected $fillable = ['event_id', 'created_by', 'status', 'poll_date', 'question','auto_poll', 'allow_member_add_option', 'allow_multiple_selection'];
 
     protected static function boot()
     {
@@ -45,5 +46,10 @@ class Poll extends Model
     {
         return $this->hasMany(PollOption::class);
     }
+public function option()
+{
+    return $this->hasMany(PollOption::class, 'poll_id', 'id');
+}
+
 
 }

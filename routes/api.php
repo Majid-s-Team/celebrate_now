@@ -42,11 +42,12 @@ Route::prefix('auth')->group(function () {
     Route::get('/profile', [AuthController::class, 'profile'])->middleware('auth:sanctum');
     Route::delete('/deactivate', [AuthController::class, 'deactivate'])->middleware('auth:sanctum');
     Route::post('/upload-image', [AuthController::class, 'uploadImage']);
+    Route::delete('/delete-user/{id}', [AuthController::class, 'softDeleteUser'])->middleware('auth:sanctum');
 
     Route::post('/get-otp', [OTPController::class, 'getOtp']);
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
     Route::post('verify-otp-account', [OTPController::class, 'verifyOtpToActivateAccount']);
-
+    Route::get('/policies',[PolicyController::class,'index']);
 
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -112,6 +113,7 @@ Route::prefix('auth')->group(function () {
         Route::get('/events', [EventController::class, 'index']);
         Route::get('/events/{id}', [EventController::class, 'show']);
         Route::delete('/events/{id}', [EventController::class, 'destroy']);
+        Route::post('/events/del-members',[EventController::class,'deleteMember']);
 
         Route::get('/events/{id}/group-members-for-vote', [EventController::class, 'groupMembersForVote']);
         Route::get('/events/{eventId}/members', [EventController::class, 'getEventMembers']);
@@ -155,9 +157,8 @@ Route::prefix('auth')->group(function () {
         Route::post('coins/purchase', [CoinController::class, 'purchase']);
         Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);
         Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
-
-
-
+        Route::get('/surprise-donations', [TransactionController::class, 'surpriseDonations']);
+        Route::get('/with-surprise-contributions', [WalletController::class, 'listWithSurpriseContributionsAndTotal']);
 
     });
 
