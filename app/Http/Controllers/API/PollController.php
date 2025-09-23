@@ -177,41 +177,65 @@ public function eventPollResults($eventId)
     }
 
     $results = $event->polls->map(function ($poll) {
-        $votes = $poll->candidates
-            ->filter(fn($c) => $c->candidate !== null)
-            ->map(function ($c) use ($poll) {
-                $candidateVotes = $poll->votes
-                    ->where('candidate_id', $c->candidate_id)
+        // check karo poll me candidates hain ya sirf options
+        if ($poll->candidates->count() > 0) {
+            // candidate-based poll
+            $votes = $poll->candidates
+                ->filter(fn($c) => $c->candidate !== null)
+                ->map(function ($c) use ($poll) {
+                    $candidateVotes = $poll->votes
+                        ->where('candidate_id', $c->candidate_id)
+                        ->filter(fn($v) => $v->voter !== null);
+
+                           $totalCandidateVotes = $candidateVotes->count(); // ✅ ek hi jagah count
+ if ($totalCandidateVotes > 0) {
+                return $candidateVotes->map(function ($v) use ($c, $totalCandidateVotes) {
+                            return [
+                                'candidate_id'   => $c->candidate_id,
+                                'voter_id'       => $v->voter_id,
+                                'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                                'email'          => $c->candidate->email,
+                                'profile_image'  => $c->candidate->profile_image,
+                                'votes_count'    => $totalCandidateVotes,
+                                'option_text'    => $v->option->option_text ?? null,
+                                'poll_option_id' => $v->option->id ?? null,
+                            ];
+                        })->values();
+                    } else {
+                        return collect([[
+                            'candidate_id'   => $c->candidate_id,
+                            'voter_id'       => null,
+                            'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                            'email'          => $c->candidate->email,
+                            'profile_image'  => $c->candidate->profile_image,
+                            'votes_count'    => 0,
+                            'option_text'    => null,
+                            'poll_option_id' => null,
+                        ]]);
+                    }
+                })
+                ->flatten(1)
+                ->values();
+        } else {
+            // option-based poll
+            $votes = $poll->options->map(function ($opt) use ($poll) {
+                $optionVotes = $poll->votes
+                    ->where('poll_option_id', $opt->id)
                     ->filter(fn($v) => $v->voter !== null);
 
-                if ($candidateVotes->count() > 0) {
-                    return $candidateVotes->map(function ($v) use ($c) {
-                        return [
-                            'candidate_id'  => $c->candidate_id,
-                            'voter_id'      => $v->voter_id,
-                            'name'          => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                            'email'         => $c->candidate->email,
-                            'profile_image' => $c->candidate->profile_image,
-                            'votes_count'   => 1,
-                            'option_text'   => $v->option->option_text ?? null,
-                            'poll_option_id'=> $v->option->id ?? null,
-                        ];
-                    })->values();
-                } else {
-                    return collect([[
-                        'candidate_id'  => $c->candidate_id,
-                        'voter_id'      => null,
-                        'name'          => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                        'email'         => $c->candidate->email,
-                        'profile_image' => $c->candidate->profile_image,
-                        'votes_count'   => 0,
-                        'option_text'   => null,
-                        'poll_option_id'=> null,
-                    ]]);
-                }
-            })
-            ->flatten(1)
-            ->values();
+                return [
+                    'poll_option_id' => $opt->id,
+                    'option_text'    => $opt->option_text,
+                    'votes_count'    => $optionVotes->count(),
+                     'voter_id'       => $optionVotes->pluck('voter_id')->first(),
+                    'voters'         => $optionVotes->map(fn($v) => [
+                        'voter_id' => $v->voter_id,
+                        'name'     => $v->voter->first_name . ' ' . $v->voter->last_name,
+                        'email'    => $v->voter->email,
+                    ])->values()
+                ];
+            });
+        }
 
         // poll ke saare options nikal lo
         $options = $poll->options->map(function ($opt) {
@@ -223,17 +247,21 @@ public function eventPollResults($eventId)
         });
 
         return [
-            'poll_id'     => $poll->id,
-            'poll_caption'=> $poll->question,
-            'created_by'=>$poll->created_by,
-            'poll_end_date'   => $poll->poll_date,
-            'created_at' => $poll->created_at?->toDateString(),
-            'status'      => $poll->status,
-            'votes'       => $votes,
-            'options'     => $options, // <-- yahan attach kiya
-            'total_votes' => $poll->votes->count(),
+            'poll_id'       => $poll->id,
+            'poll_caption'  => $poll->question,
+            'created_by'    => $poll->created_by,
+            'poll_end_date' => $poll->poll_date,
+            'created_at'    => $poll->created_at?->toDateString(),
+            'allow_member_add_option' => (bool) $poll->allow_member_add_option,
+            'allow_multiple_selection' => (bool) $poll->allow_multiple_selection,
+            'status'        => $poll->status,
+            'votes'         =>$poll->votes->count() > 0 ? $votes : null,
+            'options'       => $options,
+            'total_votes'   => $poll->votes->count(),
         ];
     });
+
+    // dd($results);
 
     return $this->sendResponse('Event poll results fetched successfully', [
         'event_id'    => $event->id,
@@ -241,8 +269,6 @@ public function eventPollResults($eventId)
         'polls'       => $results,
     ]);
 }
-
-
 
 
     public function createPoll(Request $request)
