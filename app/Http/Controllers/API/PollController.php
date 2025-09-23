@@ -187,34 +187,22 @@ public function eventPollResults($eventId)
                         ->where('candidate_id', $c->candidate_id)
                         ->filter(fn($v) => $v->voter !== null);
 
-                           $totalCandidateVotes = $candidateVotes->count(); // ✅ ek hi jagah count
- if ($totalCandidateVotes > 0) {
-                return $candidateVotes->map(function ($v) use ($c, $totalCandidateVotes) {
-                            return [
-                                'candidate_id'   => $c->candidate_id,
-                                'voter_id'       => $v->voter_id,
-                                'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                                'email'          => $c->candidate->email,
-                                'profile_image'  => $c->candidate->profile_image,
-                                'votes_count'    => $totalCandidateVotes,
-                                'option_text'    => $v->option->option_text ?? null,
-                                'poll_option_id' => $v->option->id ?? null,
-                            ];
-                        })->values();
-                    } else {
-                        return collect([[
-                            'candidate_id'   => $c->candidate_id,
-                            'voter_id'       => null,
-                            'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
-                            'email'          => $c->candidate->email,
-                            'profile_image'  => $c->candidate->profile_image,
-                            'votes_count'    => 0,
-                            'option_text'    => null,
-                            'poll_option_id' => null,
-                        ]]);
-                    }
+                    $totalCandidateVotes = $candidateVotes->count(); // ✅ ek hi jagah count
+
+                    return [
+                        'candidate_id'   => $c->candidate_id,
+                        'name'           => $c->candidate->first_name . ' ' . $c->candidate->last_name,
+                        'email'          => $c->candidate->email,
+                        'profile_image'  => $c->candidate->profile_image,
+                        'votes_count'    => $totalCandidateVotes,
+                        'voters'         => $candidateVotes->map(fn($vote) => [
+                            'voter_id'      => $vote->voter_id,
+                            'name'          => $vote->voter->first_name . ' ' . $vote->voter->last_name,
+                            'email'         => $vote->voter->email,
+                            'profile_image' => $vote->voter->profile_image,
+                        ])->values(),
+                    ];
                 })
-                ->flatten(1)
                 ->values();
         } else {
             // option-based poll
@@ -227,13 +215,12 @@ public function eventPollResults($eventId)
                     'poll_option_id' => $opt->id,
                     'option_text'    => $opt->option_text,
                     'votes_count'    => $optionVotes->count(),
-                     'voter_id'       => $optionVotes->pluck('voter_id')->first(),
                     'voters'         => $optionVotes->map(fn($v) => [
-                        'voter_id' => $v->voter_id,
-                        'name'     => $v->voter->first_name . ' ' . $v->voter->last_name,
-                        'email'    => $v->voter->email,
-                        'profile_image' => $v->voter->profile_image
-                    ])->values()
+                        'voter_id'      => $v->voter_id,
+                        'name'          => $v->voter->first_name . ' ' . $v->voter->last_name,
+                        'email'         => $v->voter->email,
+                        'profile_image' => $v->voter->profile_image,
+                    ])->values(),
                 ];
             });
         }
@@ -253,16 +240,14 @@ public function eventPollResults($eventId)
             'created_by'    => $poll->created_by,
             'poll_end_date' => $poll->poll_date,
             'created_at'    => $poll->created_at?->toDateString(),
-            'allow_member_add_option' => (bool) $poll->allow_member_add_option,
-            'allow_multiple_selection' => (bool) $poll->allow_multiple_selection,
+            'allow_member_add_option'   => (bool) $poll->allow_member_add_option,
+            'allow_multiple_selection'  => (bool) $poll->allow_multiple_selection,
             'status'        => $poll->status,
-            'votes'         =>$poll->votes->count() > 0 ? $votes : null,
+            'votes'         => $poll->votes->count() > 0 ? $votes : null,
             'options'       => $options,
             'total_votes'   => $poll->votes->count(),
         ];
     });
-
-    // dd($results);
 
     return $this->sendResponse('Event poll results fetched successfully', [
         'event_id'    => $event->id,
@@ -270,6 +255,7 @@ public function eventPollResults($eventId)
         'polls'       => $results,
     ]);
 }
+
 
 
     public function createPoll(Request $request)
