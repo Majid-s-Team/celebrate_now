@@ -169,7 +169,7 @@ public function eventPollResults($eventId)
         'polls.candidates.candidate',
         'polls.votes.voter',
         'polls.votes.option',
-        'polls.options'
+        'polls.options',
     ])->find($eventId);
 
     if (!$event) {
@@ -232,6 +232,7 @@ public function eventPollResults($eventId)
                         'voter_id' => $v->voter_id,
                         'name'     => $v->voter->first_name . ' ' . $v->voter->last_name,
                         'email'    => $v->voter->email,
+                        'profile_image' => $v->voter->profile_image
                     ])->values()
                 ];
             });
