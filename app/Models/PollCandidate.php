@@ -20,4 +20,8 @@ class PollCandidate extends Model
     {
         return $this->belongsTo(User::class, 'candidate_id');
     }
+    public function pollOption()
+{
+    return $this->belongsTo(PollOption::class, 'poll_option_id');
+}
 }
