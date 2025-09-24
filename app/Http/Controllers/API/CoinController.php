@@ -74,75 +74,138 @@ class CoinController extends Controller
 
 
 
+    // public function purchase(Request $request)
+    // {
+    //     try {
+    //         $data = $request->validate([
+    //             'coin_package_id' => ['required', 'exists:coin_packages,id'],
+    //             'card_id' => ['required', 'exists:cards,id'],
+    //         ]);
+
+    //         $user = auth()->user();
+
+    //         $card = Card::where('id', $data['card_id'])
+    //             ->where('user_id', $user->id)
+    //             ->first();
+
+    //         if (!$card) {
+    //             return $this->sendError('Card not found or does not belong to you', [], 404);
+    //         }
+
+    //         $package = CoinPackage::find($data['coin_package_id']);
+    //         if (!$package) {
+    //             return $this->sendError('Coin package not found', [], 404);
+    //         }
+
+    //         DB::beginTransaction();
+
+    //         try {
+    //             $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
+    //             if (!$wallet) {
+    //                 $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
+    //                 $wallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
+    //             }
+
+    //             $wallet->balance = (int) $wallet->balance + (int) $package->coins;
+    //             $wallet->save();
+
+    //             CoinTransaction::create([
+    //                 'sender_id' => null,
+    //                 'receiver_id' => $user->id,
+    //                 'coin_package_id' => $package->id,
+    //                 'post_id' => null,
+    //                 'event_id' => null,
+    //                 'coins' => $package->coins,
+    //                 'type' => 'purchase',
+    //                 'message' => 'Purchased ' . $package->coins . ' coins using card #' . $card->id,
+    //             ]);
+
+    //             // Send notification
+    //             Notification::create([
+    //                 'user_id' => $user->id,
+    //                 'title'   => 'Coin Purchase Successful',
+    //                 'message' => 'You purchased ' . $package->coins . ' coins successfully.',
+    //             ]);
+
+    //             DB::commit();
+
+    //             return $this->sendResponse('Coins purchased successfully', [
+    //                 'wallet_balance' => $wallet->balance,
+    //                 'package' => $package->only(['id', 'name', 'coins', 'price']),
+    //             ]);
+    //         } catch (\Exception $e) {
+    //             DB::rollBack();
+    //             return $this->sendError('Purchase failed', ['error' => $e->getMessage()], 500);
+    //         }
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         return $this->sendError('Validation Error', $e->errors(), 422);
+    //     } catch (\Exception $e) {
+    //         return $this->sendError('Something went wrong', ['error' => $e->getMessage()], 500);
+    //     }
+    // }
     public function purchase(Request $request)
-    {
+{
+    try {
+        $data = $request->validate([
+            'coins'  => ['required', 'integer', 'min:1'],
+            'amount' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        $user = auth()->user();
+
+        DB::beginTransaction();
+
         try {
-            $data = $request->validate([
-                'coin_package_id' => ['required', 'exists:coin_packages,id'],
-                'card_id' => ['required', 'exists:cards,id'],
+            // ✅ Check if a package with the same coins exists
+            $package = CoinPackage::where('coins', $data['coins'])->first();
+
+            if (!$package) {
+                // Create new package
+                $package = CoinPackage::create([
+                    'coins' => $data['coins'],
+                    'price' => $data['amount'],
+                    'currency' => 'USD',
+                ]);
+            }
+
+            // ✅ Create coin transaction
+            $transaction = CoinTransaction::create([
+                'sender_id'       => null,
+                'receiver_id'     => $user->id,
+                'coin_package_id' => $package->id,
+                'post_id'         => null,
+                'event_id'        => null,
+                'coins'           => $data['coins'],
+                'type'            => 'purchase',
+                'message'         => 'Purchased ' . $data['coins'] . ' coins for amount ' . $data['amount'],
             ]);
 
-            $user = auth()->user();
+            // ✅ Send notification
+            Notification::create([
+                'user_id' => $user->id,
+                'title'   => 'Coin Purchase Successful',
+                'message' => 'You purchased ' . $data['coins'] . ' coins for ' . $data['amount'] . ' successfully.',
+            ]);
 
-            $card = Card::where('id', $data['card_id'])
-                ->where('user_id', $user->id)
-                ->first();
+            DB::commit();
 
-            if (!$card) {
-                return $this->sendError('Card not found or does not belong to you', [], 404);
-            }
+            return $this->sendResponse('Coins purchased successfully', [
+                'transaction' => $transaction,
+                'package'     => $package->only(['coins', 'price', 'created_at', 'updated_at']),
+            ]);
 
-            $package = CoinPackage::find($data['coin_package_id']);
-            if (!$package) {
-                return $this->sendError('Coin package not found', [], 404);
-            }
-
-            DB::beginTransaction();
-
-            try {
-                $wallet = Wallet::where('user_id', $user->id)->lockForUpdate()->first();
-                if (!$wallet) {
-                    $wallet = Wallet::create(['user_id' => $user->id, 'balance' => 0]);
-                    $wallet = Wallet::where('id', $wallet->id)->lockForUpdate()->first();
-                }
-
-                $wallet->balance = (int) $wallet->balance + (int) $package->coins;
-                $wallet->save();
-
-                CoinTransaction::create([
-                    'sender_id' => null,
-                    'receiver_id' => $user->id,
-                    'coin_package_id' => $package->id,
-                    'post_id' => null,
-                    'event_id' => null,
-                    'coins' => $package->coins,
-                    'type' => 'purchase',
-                    'message' => 'Purchased ' . $package->coins . ' coins using card #' . $card->id,
-                ]);
-
-                // Send notification
-                Notification::create([
-                    'user_id' => $user->id,
-                    'title'   => 'Coin Purchase Successful',
-                    'message' => 'You purchased ' . $package->coins . ' coins successfully.',
-                ]);
-
-                DB::commit();
-
-                return $this->sendResponse('Coins purchased successfully', [
-                    'wallet_balance' => $wallet->balance,
-                    'package' => $package->only(['id', 'name', 'coins', 'price']),
-                ]);
-            } catch (\Exception $e) {
-                DB::rollBack();
-                return $this->sendError('Purchase failed', ['error' => $e->getMessage()], 500);
-            }
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            return $this->sendError('Validation Error', $e->errors(), 422);
         } catch (\Exception $e) {
-            return $this->sendError('Something went wrong', ['error' => $e->getMessage()], 500);
+            DB::rollBack();
+            return $this->sendError('Purchase failed', ['error' => $e->getMessage()], 500);
         }
+
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return $this->sendError('Validation Error', $e->errors(), 422);
+    } catch (\Exception $e) {
+        return $this->sendError('Something went wrong', ['error' => $e->getMessage()], 500);
     }
+}
+
 
 
 
