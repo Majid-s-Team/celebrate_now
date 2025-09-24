@@ -155,7 +155,7 @@ Route::prefix('auth')->group(function () {
         Route::post('notifications', [NotificationController::class, 'create']);
 
         Route::post('coins/purchase', [CoinController::class, 'purchase']);
-        Route::get('/coins/transactions/{eventId}', [TransactionController::class, 'eventTransactions']);
+        Route::get('/coins/transactions/{eventId?}', [TransactionController::class, 'eventTransactions']);
         Route::get('/with-donations', [WalletController::class, 'listWithDonations']);
         Route::get('/surprise-donations', [TransactionController::class, 'surpriseDonations']);
         Route::get('/with-surprise-contributions', [WalletController::class, 'listWithSurpriseContributionsAndTotal']);
