@@ -222,9 +222,8 @@ public function vote(Request $request)
         if (!$poll->allow_multiple_selection && count($pollOptionIds) > 1) {
             return $this->sendError('This poll allows only one selection', [], 400);
         }
-        // dd($poll->allow_multiple_selection);
         if ($poll->allow_multiple_selection) {
-            // Multiple select allowed → handle each option toggle
+            // Multiple select true → handle each option toggle
             foreach ($pollOptionIds as $optionId) {
                 $existingVote = PollVote::where('poll_id', $poll->id)
                     ->where('voter_id', $user->id)
