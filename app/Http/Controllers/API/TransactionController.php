@@ -149,9 +149,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
 }
 
 
-
-
-   public function eventTransactions(Request $request, $eventId = null)
+public function eventTransactions(Request $request, $eventId = null)
 {
     try {
         $user       = auth()->user();
@@ -242,7 +240,11 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
         }
 
         // Non-event transactions
-        $transactions = CoinTransaction::with(['sender:id,first_name,last_name','receiver:id,first_name,last_name'])
+        $transactions = CoinTransaction::with([
+                'sender:id,first_name,last_name',
+                'receiver:id,first_name,last_name',
+                'package:id,price,currency'
+            ])
             ->where(function($q) use ($user) {
                 $q->where('sender_id', $user->id)
                   ->orWhere('receiver_id', $user->id);
@@ -255,9 +257,11 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
         $response = $transactions->map(fn($tx) => [
             'transaction_id'    => $tx->id,
             'coins'             => $tx->coins,
+            'amount'            => $tx->package?->price,   // 👈 amount from package
+            'currency'          => $tx->package?->currency, // 👈 currency from package
             'type'              => $tx->type,
             'message'           => $tx->message,
-            'status'            => $tx->status, // include status in response
+            'status'            => $tx->status ?? null, 
             'sender_id'         => $tx->sender_id,
             'receiver_id'       => $tx->receiver_id,
             'post_id'           => $tx->post_id,

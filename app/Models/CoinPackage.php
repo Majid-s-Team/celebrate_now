@@ -12,4 +12,9 @@ class CoinPackage extends Model
     {
         return $this->hasMany(CoinTransaction::class);
     }
+    public function package()
+{
+    return $this->belongsTo(CoinPackage::class, 'coin_package_id');
+}
+
 }
