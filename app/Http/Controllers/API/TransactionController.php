@@ -151,14 +151,14 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
 
 
 
-public function eventTransactions(Request $request, $eventId = null)
+   public function eventTransactions(Request $request, $eventId = null)
 {
     try {
         $user       = auth()->user();
-        $dateTime   = $request->date_time;
-        $status     = $request->status;       
-        $startDate  = $request->start_date;
-        $endDate    = $request->end_date;  
+        $dateTime   = $request->date_time;   // existing single date filter
+        $status     = $request->status;      // new param: purchase | send | receive
+        $startDate  = $request->start_date;  // new param
+        $endDate    = $request->end_date;    // new param
 
         if ($eventId) {
             $event = Event::findOrFail($eventId);
@@ -205,6 +205,7 @@ public function eventTransactions(Request $request, $eventId = null)
                 ->with('sender:id,first_name,last_name')
                 ->get();
 
+            // Visibility logic
             if ($event->created_by == $user->id || $event->is_show_donation) {
                 $response['contributors'] = $donations->map(fn($row) => [
                     'user_id' => $row->sender_id,
@@ -240,7 +241,7 @@ public function eventTransactions(Request $request, $eventId = null)
             return $this->sendResponse('Event transactions fetched successfully', $response);
         }
 
-        // For user-wide transactions
+        // Non-event transactions
         $transactions = CoinTransaction::with(['sender:id,first_name,last_name','receiver:id,first_name,last_name'])
             ->where(function($q) use ($user) {
                 $q->where('sender_id', $user->id)
@@ -256,7 +257,7 @@ public function eventTransactions(Request $request, $eventId = null)
             'coins'             => $tx->coins,
             'type'              => $tx->type,
             'message'           => $tx->message,
-            'status'            => $tx->status, // make sure `status` column exists in your table
+            'status'            => $tx->status, // include status in response
             'sender_id'         => $tx->sender_id,
             'receiver_id'       => $tx->receiver_id,
             'post_id'           => $tx->post_id,
@@ -271,6 +272,7 @@ public function eventTransactions(Request $request, $eventId = null)
         return $this->sendError('Failed to fetch transactions', ['error' => $e->getMessage()], 500);
     }
 }
+
 
 
 
