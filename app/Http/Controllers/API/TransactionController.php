@@ -155,10 +155,10 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
 {
     try {
         $user       = auth()->user();
-        $dateTime   = $request->date_time;   // existing single date filter
-        $status     = $request->status;      // new param: purchase | send | receive
-        $startDate  = $request->start_date;  // new param
-        $endDate    = $request->end_date;    // new param
+        $dateTime   = $request->date_time;   
+        $status     = $request->status;      
+        $startDate  = $request->start_date;  
+        $endDate    = $request->end_date;   
 
         if ($eventId) {
             $event = Event::findOrFail($eventId);
@@ -166,7 +166,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
             $totalDonated = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->when($dateTime, fn($q) => $q->whereDate('created_at', $dateTime))
-                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($status, fn($q) => $q->where('type', $status))
                 ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->sum('coins');
 
@@ -247,7 +247,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
                 $q->where('sender_id', $user->id)
                   ->orWhere('receiver_id', $user->id);
             })
-            ->when($status, fn($q) => $q->where('status', $status))
+            ->when($status, fn($q) => $q->where('type', $status))
             ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
             ->orderBy('created_at','desc')
             ->get();
