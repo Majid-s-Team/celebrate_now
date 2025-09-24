@@ -156,19 +156,23 @@ class CoinController extends Controller
         DB::beginTransaction();
 
         try {
-            // ✅ Check if a package with the same coins exists
             $package = CoinPackage::where('coins', $data['coins'])->first();
 
             if (!$package) {
-                // Create new package
                 $package = CoinPackage::create([
                     'coins' => $data['coins'],
                     'price' => $data['amount'],
                     'currency' => 'USD',
                 ]);
             }
+             $wallet = Wallet::firstOrCreate(
+                ['user_id' => $user->id],
+                ['balance' => 0]
+            );
 
-            // ✅ Create coin transaction
+            $wallet->balance += $data['coins'];
+            $wallet->save();
+
             $transaction = CoinTransaction::create([
                 'sender_id'       => null,
                 'receiver_id'     => $user->id,
@@ -180,7 +184,6 @@ class CoinController extends Controller
                 'message'         => 'Purchased ' . $data['coins'] . ' coins for amount ' . $data['amount'],
             ]);
 
-            // ✅ Send notification
             Notification::create([
                 'user_id' => $user->id,
                 'title'   => 'Coin Purchase Successful',
