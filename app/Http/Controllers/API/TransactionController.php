@@ -262,6 +262,12 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
             'receiver_id'       => $tx->receiver_id,
             'post_id'           => $tx->post_id,
             'event_id'          => $tx->event_id,
+            'coin_package'           => $tx->package ? [
+                                    'id'       => $tx->package->id,
+                                    'coins'    => $tx->package->coins,
+                                    'price'    => $tx->package->price,
+                                    'currency' => $tx->package->currency,
+                                ] : null,
             'contribution_type' => $tx->contribution_type,
             'created_at'        => $tx->created_at->toDateTimeString(),
         ]);
