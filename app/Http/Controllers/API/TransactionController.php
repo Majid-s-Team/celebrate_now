@@ -154,16 +154,20 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
 public function eventTransactions(Request $request, $eventId = null)
 {
     try {
-        $user = auth()->user();
-        $dateTime = $request->date_time;
+        $user       = auth()->user();
+        $dateTime   = $request->date_time;
+        $status     = $request->status;       
+        $startDate  = $request->start_date;
+        $endDate    = $request->end_date;  
 
-        // Case 1: Specific Event
         if ($eventId) {
             $event = Event::findOrFail($eventId);
 
             $totalDonated = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->when($dateTime, fn($q) => $q->whereDate('created_at', $dateTime))
+                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->sum('coins');
 
             $targetAmount = $event->donation_goal ?? 0;
@@ -171,19 +175,21 @@ public function eventTransactions(Request $request, $eventId = null)
             $percentage = $targetAmount > 0 ? round(($totalDonated / $targetAmount) * 100, 2) : 0;
 
             $response = [
-                'event_id' => $event->id,
-                'event_title' => $event->title,
-                'target_amount' => $targetAmount,
-                'total_donated' => $totalDonated,
-                'remaining' => $remaining,
-                'percentage' => $percentage,
-                'contributors' => [],
-                'surprise' => [],
+                'event_id'       => $event->id,
+                'event_title'    => $event->title,
+                'target_amount'  => $targetAmount,
+                'total_donated'  => $totalDonated,
+                'remaining'      => $remaining,
+                'percentage'     => $percentage,
+                'contributors'   => [],
+                'surprise'       => [],
             ];
 
             $donations = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->where('contribution_type', 'donation')
+                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
                 ->groupBy('sender_id')
                 ->with('sender:id,first_name,last_name')
@@ -192,67 +198,71 @@ public function eventTransactions(Request $request, $eventId = null)
             $surprises = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->where('contribution_type', 'surprise')
+                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
                 ->groupBy('sender_id')
                 ->with('sender:id,first_name,last_name')
                 ->get();
 
-            // Visibility logic
             if ($event->created_by == $user->id || $event->is_show_donation) {
                 $response['contributors'] = $donations->map(fn($row) => [
                     'user_id' => $row->sender_id,
-                    'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
-                    'coins' => $row->total_coins,
-                    'type' => 'donation',
+                    'name'    => $row->sender->first_name . ' ' . $row->sender->last_name,
+                    'coins'   => $row->total_coins,
+                    'type'    => 'donation',
                 ]);
 
                 $response['surprise'] = $surprises->map(fn($row) => [
                     'user_id' => $row->sender_id,
-                    'name' => $row->sender->first_name . ' ' . $row->sender->last_name,
-                    'coins' => $row->total_coins,
-                    'type' => 'surprise',
+                    'name'    => $row->sender->first_name . ' ' . $row->sender->last_name,
+                    'coins'   => $row->total_coins,
+                    'type'    => 'surprise',
                 ]);
             } else {
                 $ownDonation = $donations->firstWhere('sender_id', $user->id);
                 if ($ownDonation) $response['contributors'][] = [
                     'user_id' => $ownDonation->sender_id,
-                    'name' => $ownDonation->sender->first_name . ' ' . $ownDonation->sender->last_name,
-                    'coins' => $ownDonation->total_coins,
-                    'type' => 'donation',
+                    'name'    => $ownDonation->sender->first_name . ' ' . $ownDonation->sender->last_name,
+                    'coins'   => $ownDonation->total_coins,
+                    'type'    => 'donation',
                 ];
 
                 $ownSurprise = $surprises->firstWhere('sender_id', $user->id);
                 if ($ownSurprise) $response['surprise'][] = [
                     'user_id' => $ownSurprise->sender_id,
-                    'name' => $ownSurprise->sender->first_name . ' ' . $ownSurprise->sender->last_name,
-                    'coins' => $ownSurprise->total_coins,
-                    'type' => 'surprise',
+                    'name'    => $ownSurprise->sender->first_name . ' ' . $ownSurprise->sender->last_name,
+                    'coins'   => $ownSurprise->total_coins,
+                    'type'    => 'surprise',
                 ];
             }
 
             return $this->sendResponse('Event transactions fetched successfully', $response);
         }
 
-        // Case 2: No Event ID → All transactions of the user
+        // For user-wide transactions
         $transactions = CoinTransaction::with(['sender:id,first_name,last_name','receiver:id,first_name,last_name'])
             ->where(function($q) use ($user) {
                 $q->where('sender_id', $user->id)
                   ->orWhere('receiver_id', $user->id);
             })
+            ->when($status, fn($q) => $q->where('status', $status))
+            ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
             ->orderBy('created_at','desc')
             ->get();
 
         $response = $transactions->map(fn($tx) => [
-            'transaction_id' => $tx->id,
-            'coins' => $tx->coins,
-            'type' => $tx->type,
-            'message' => $tx->message,
-            'sender_id' => $tx->sender_id,
-            'receiver_id' => $tx->receiver_id,
-            'post_id' => $tx->post_id,
-            'event_id' => $tx->event_id,
+            'transaction_id'    => $tx->id,
+            'coins'             => $tx->coins,
+            'type'              => $tx->type,
+            'message'           => $tx->message,
+            'status'            => $tx->status, // make sure `status` column exists in your table
+            'sender_id'         => $tx->sender_id,
+            'receiver_id'       => $tx->receiver_id,
+            'post_id'           => $tx->post_id,
+            'event_id'          => $tx->event_id,
             'contribution_type' => $tx->contribution_type,
-            'created_at' => $tx->created_at->toDateTimeString(),
+            'created_at'        => $tx->created_at->toDateTimeString(),
         ]);
 
         return $this->sendResponse('User transactions fetched successfully', $response);
@@ -261,6 +271,7 @@ public function eventTransactions(Request $request, $eventId = null)
         return $this->sendError('Failed to fetch transactions', ['error' => $e->getMessage()], 500);
     }
 }
+
 
 
     public function gifts(Request $request)
