@@ -514,27 +514,55 @@ public function eventPollResults($eventId)
     }
 
 
-    public function deletePoll(Request $request, $pollId)
-    {
-        $user = $request->user();
-        $poll = Poll::with('event')->findOrFail($pollId);
+    // public function deletePoll(Request $request, $pollId)
+    // {
+    //     $user = $request->user();
+    //     $poll = Poll::with('event')->findOrFail($pollId);
 
-        $isCreator = $poll->created_by === $user->id;
-        $isHostOrCohost = EventMember::where('event_id', $poll->event_id)
-            ->where('user_id', $user->id)
-            ->whereIn('role', ['host', 'cohost'])
-            ->exists();
+    //     $isCreator = $poll->created_by === $user->id;
+    //     $isHostOrCohost = EventMember::where('event_id', $poll->event_id)
+    //         ->where('user_id', $user->id)
+    //         ->whereIn('role', ['host', 'cohost'])
+    //         ->exists();
 
-        if (!$isCreator && !$isHostOrCohost) {
-            return $this->sendError('You are not authorized to delete this poll', [], 403);
-        }
+    //     if (!$isCreator && !$isHostOrCohost) {
+    //         return $this->sendError('You are not authorized to delete this poll', [], 403);
+    //     }
 
-        $poll->delete();
+    //     $poll->delete();
 
-        return $this->sendResponse('Poll deleted successfully');
+    //     return $this->sendResponse('Poll deleted successfully');
+    // }
+
+
+
+//New Deletepoll due to prepared statment db issue
+public function deletePoll(Request $request, $pollId)
+{
+    $user = $request->user();
+    $poll = Poll::with('event')->findOrFail($pollId);
+
+    // Check if user is creator or host/cohost of the event
+    $isCreator = $poll->created_by === $user->id;
+    $isHostOrCohost = EventMember::where('event_id', $poll->event_id)
+        ->where('user_id', $user->id)
+        ->whereIn('role', ['host', 'cohost'])
+        ->exists();
+
+    if (!$isCreator && !$isHostOrCohost) {
+        return $this->sendError('You are not authorized to delete this poll', [], 403);
     }
 
+    // Delete related poll options in a single query to avoid prepared statement issues
+    \DB::table('poll_options')
+        ->where('poll_id', $poll->id)
+        ->delete();
 
+    // Delete the poll itself
+    $poll->delete();
+
+    return $this->sendResponse('Poll deleted successfully');
+}
 
     public function addOption(Request $request, $pollId)
     {
