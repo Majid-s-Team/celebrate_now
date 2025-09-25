@@ -155,10 +155,10 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
 {
     try {
         $user       = auth()->user();
-        $dateTime   = $request->date_time;   
-        $status     = $request->status;      
-        $startDate  = $request->start_date;  
-        $endDate    = $request->end_date;   
+        $dateTime   = $request->date_time;
+        $status     = $request->status;
+        $startDate  = $request->start_date;
+        $endDate    = $request->end_date;
 
         if ($eventId) {
             $event = Event::findOrFail($eventId);
@@ -166,7 +166,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
             $totalDonated = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->when($dateTime, fn($q) => $q->whereDate('created_at', $dateTime))
-                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($status, fn($q) => $q->where('type', $status))
                 ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->sum('coins');
 
@@ -188,7 +188,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
             $donations = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->where('contribution_type', 'donation')
-                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($status, fn($q) => $q->where('type', $status))
                 ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
                 ->groupBy('sender_id')
@@ -198,7 +198,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
             $surprises = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
                 ->where('contribution_type', 'surprise')
-                ->when($status, fn($q) => $q->where('status', $status))
+                ->when($status, fn($q) => $q->where('type', $status))
                 ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->select('sender_id', DB::raw('SUM(coins) as total_coins'))
                 ->groupBy('sender_id')
