@@ -159,7 +159,6 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
         $status     = $request->status;
         $startDate  = $request->start_date;
         $endDate    = $request->end_date;
-
         if ($eventId) {
             $event = Event::findOrFail($eventId);
 
@@ -169,6 +168,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
                 ->when($status, fn($q) => $q->where('type', $status))
                 ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
                 ->sum('coins');
+
 
             $targetAmount = $event->donation_goal ?? 0;
             $remaining = max($targetAmount - $totalDonated, 0);
@@ -194,6 +194,8 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
                 ->groupBy('sender_id')
                 ->with('sender:id,first_name,last_name')
                 ->get();
+                        // dd($status);
+
 
             $surprises = CoinTransaction::where('event_id', $eventId)
                 ->where('type', 'send')
@@ -247,7 +249,7 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
                 $q->where('sender_id', $user->id)
                   ->orWhere('receiver_id', $user->id);
             })
-            ->when($status, fn($q) => $q->where('status', $status))
+            ->when($status, fn($q) => $q->where('type', $status))
             ->when($startDate && $endDate, fn($q) => $q->whereBetween('created_at', [$startDate, $endDate]))
             ->orderBy('created_at','desc')
             ->get();
