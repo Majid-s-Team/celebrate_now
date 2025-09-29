@@ -83,7 +83,8 @@ class PostController extends Controller
                 ->where('status', 'joined')
                 ->whereIn('role', ['host', 'cohost'])
                 ->exists();
-        // dd($isHostOrCohost);
+
+
 
             if (!$isHostOrCohost) {
                 return $this->sendError('Only host or cohost can post in this event.', [], 403);
