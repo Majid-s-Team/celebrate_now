@@ -116,6 +116,7 @@ class WalletController extends Controller
             'my_contribution'       => $myContribution,
             'donors'                => $donors,
             'surprise_contributors' => $surpriseContributors,
+            'is_show_donation' => $event->is_show_donation
         ];
 
         return $this->sendResponse('Event donation & surprise contribution detail fetched successfully', $data);

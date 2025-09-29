@@ -327,7 +327,7 @@ public function store(Request $request)
 
         // Case 1: Donation deadline after event start
         if ($donationDeadline->greaterThanOrEqualTo($eventStart)) {
-            return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
+            return $this->sendError("Donation deadline must be set before the event starts.", [], 422);
         }
 
         // Case 2: If event starts today (and created today), deadline must be 1h before start
