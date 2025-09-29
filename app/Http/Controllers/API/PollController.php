@@ -14,6 +14,7 @@ use App\Models\EventMember;
 use App\Models\PollOption;
 use App\Models\PollMemberOption;
 use Illuminate\Validation\Rule;
+use Carbon\Carbon;
 
 
 
@@ -128,16 +129,28 @@ class PollController extends Controller
 public function vote(Request $request)
 {
     $user = $request->user();
-
     // Poll find karo
     $poll = Poll::with('candidates', 'event')->find($request->poll_id);
+    $pollEndDate = $poll->poll_date;
 
     if (!$poll) {
         return $this->sendError('Poll not found', [], 404);
     }
+  if (!empty($pollEndDate)) {
+    $pollEndDate = Carbon::parse($pollEndDate)->startOfDay(); // 👈 string → Carbon
+    $today = Carbon::today();
+    // dd(vars:$today->greaterThan($pollEndDate));
+
+    if ($today->greaterThan($pollEndDate)) {
+        return $this->sendError("The Poll is closed", [], 422);
+    }
+}
+
     if ($poll->status !== 'active') {
         return $this->sendError('Poll is closed', [], 400);
     }
+
+
 
     // Event nikaal lo
     $event = $poll->event;
