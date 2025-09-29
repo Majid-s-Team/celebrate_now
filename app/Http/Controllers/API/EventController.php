@@ -17,278 +17,6 @@ class EventController extends Controller
 {
     // Create event
 
-//     public function store(Request $request)
-// {
-//     $user = $request->user();
-
-//     $data = $request->validate([
-//         'title' => 'required|string|max:255',
-//         'date' => 'required|date',
-//         'start_time' => 'required',
-//         'end_time' => 'required',
-//         'location' => 'nullable|string|max:1000',
-//         'description' => 'nullable|string',
-//         'cover_photo_url' => 'nullable|url',
-//         'event_type_id' => 'nullable|exists:event_categories,id',
-//         'mode' => ['required', Rule::in(['online', 'physical'])],
-//         'physical_type' => ['nullable', Rule::in(['self_host', 'group_vote'])],
-//         'funding_type' => ['nullable', Rule::in(['self_financed', 'donation_based'])],
-//         'surprise_contribution' => 'nullable|boolean',
-//         'member_ids' => 'nullable|array',
-//         'member_ids.*' => 'exists:users,id',
-//         'cohost_ids' => 'nullable|array',
-//         'cohost_ids.*' => 'exists:users,id',
-//         'poll_date' => 'nullable|date',
-//         'poll_end_time' => 'nullable|date_format:H:i',
-//         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
-//         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
-//         'donation_deadline' => 'nullable|date',
-//     ]);
-
-//     // 👉 Custom validation for poll_date & poll_end_time
-//     if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
-//         $eventDate = Carbon::parse($data['date']);
-//         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
-
-//         // 1. poll_date must not be after event date
-//         if (!empty($data['poll_date'])) {
-//             $pollDate = Carbon::parse($data['poll_date']);
-//             if ($pollDate->greaterThan($eventDate)) {
-//                 return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
-//             }
-//         }
-
-//         // 2. poll_end_time must be before event start
-//         if (!empty($data['poll_end_time'])) {
-//             $pollEnd = Carbon::parse($data['date'] . ' ' . $data['poll_end_time']);
-
-//             if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
-//                 return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
-//             }
-
-//             // 3. If event is today (and created today), deadline must be at least 1 hour before start
-//             if ($eventDate->isToday() && Carbon::now()->isToday()) {
-//                 if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
-//                     return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
-//                 }
-//             }
-//         }
-//     }
-
-//     // Donation validation
-//     if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
-//         return $this->sendError("Surprise contribution is not allowed for donation based events.", [], 422);
-//     }
-
-//     if (($data['funding_type'] ?? null) === 'donation_based') {
-//         $data['surprise_contribution'] = false;
-//     }
-
-//     DB::beginTransaction();
-//     try {
-//         $event = Event::create([
-//             'title' => $data['title'],
-//             'date' => $data['date'],
-//             'start_time' => $data['start_time'],
-//             'end_time' => $data['end_time'],
-//             'location' => $data['location'] ?? null,
-//             'description' => $data['description'] ?? null,
-//             'cover_photo_url' => $data['cover_photo_url'] ?? null,
-//             'event_type_id' => $data['event_type_id'] ?? null,
-//             'mode' => $data['mode'],
-//             'physical_type' => $data['physical_type'] ?? null,
-//             'funding_type' => $data['funding_type'] ?? null,
-//             'surprise_contribution' => $data['surprise_contribution'] ?? false,
-//             'created_by' => $user->id,
-//             'donation_goal' => $data['donation_goal'] ?? null,
-//             'is_show_donation' => $data['is_show_donation'] ?? false,
-//             'donation_deadline' => $data['donation_deadline'] ?? null,
-//         ]);
-
-//         EventMember::create([
-//             'event_id' => $event->id,
-//             'user_id' => $user->id,
-//             'role' => 'host',
-//             'status' => 'joined',
-//         ]);
-
-//         if (!empty($data['cohost_ids'])) {
-//             foreach ($data['cohost_ids'] as $coId) {
-//                 if ($coId == $user->id) continue;
-//                 EventMember::create([
-//                     'event_id' => $event->id,
-//                     'user_id' => $coId,
-//                     'role' => 'cohost',
-//                     'status' => 'joined',
-//                 ]);
-//             }
-//         }
-
-//         $members = $data['member_ids'] ?? [];
-//         foreach ($members as $memberId) {
-//             if ($memberId == $user->id) continue;
-//             EventMember::firstOrCreate([
-//                 'event_id' => $event->id,
-//                 'user_id' => $memberId
-//             ], [
-//                 'role' => 'member',
-//                 'status' => 'joined',
-//             ]);
-//         }
-
-//         if ($event->mode == 'physical' && $event->physical_type == 'group_vote') {
-//             $poll = Poll::create([
-//                 'event_id' => $event->id,
-//                 'created_by' => $user->id,
-//                 'status' => 'active',
-//                 'question' => 'Who should host the event?',
-//                 'auto_poll' => true,
-//                 'poll_date' => $data['poll_date'] ?? $event->date,
-//                 'poll_end_time' => $data['poll_end_time'] ?? null,
-//             ]);
-
-//             $memberRecords = EventMember::where('event_id', $event->id)->get();
-//             foreach ($memberRecords as $m) {
-//                 PollCandidate::create([
-//                     'poll_id' => $poll->id,
-//                     'candidate_id' => $m->user_id,
-//                 ]);
-//             }
-//         }
-
-//         DB::commit();
-//         return $this->sendResponse("Event created successfully", $event->load('members', 'category', 'creator'), 201);
-
-//     } catch (\Exception $e) {
-//         DB::rollBack();
-//         return $this->sendError("Event creation failed", $e->getMessage(), 500);
-//     }
-// }
-
-
-
-
-    // public function store(Request $request)
-    // {
-    //     $user = $request->user();
-
-    //     $data = $request->validate([
-    //         'title' => 'required|string|max:255',
-    //         'date' => 'required|date',
-    //         'start_time' => 'required',
-    //         'end_time' => 'required',
-    //         'location' => 'nullable|string|max:1000',
-    //         'description' => 'nullable|string',
-    //         'cover_photo_url' => 'nullable|url',
-    //         'event_type_id' => 'nullable|exists:event_categories,id',
-    //         'mode' => ['required', Rule::in(['online', 'physical'])],
-    //         'physical_type' => ['nullable', Rule::in(['self_host', 'group_vote'])],
-    //         'funding_type' => ['nullable', Rule::in(['self_financed', 'donation_based'])],
-    //         'surprise_contribution' => 'nullable|boolean',
-    //         'member_ids' => 'nullable|array',
-    //         'member_ids.*' => 'exists:users,id',
-    //         'cohost_ids' => 'nullable|array',
-    //         'cohost_ids.*' => 'exists:users,id',
-    //         'poll_date' => 'nullable|date',
-    //         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
-    //         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
-    //         'donation_deadline' => 'nullable|date',
-
-    //     ]);
-    //     if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
-    //         return $this->sendError("Surprise contribution is not allowed for donation based events.", [], 422);
-    //     }
-
-    //     if (($data['funding_type'] ?? null) === 'donation_based') {
-    //         $data['surprise_contribution'] = false;
-    //     }
-
-    //     DB::beginTransaction();
-    //     try {
-    //         $event = Event::create([
-    //             'title' => $data['title'],
-    //             'date' => $data['date'],
-    //             'start_time' => $data['start_time'],
-    //             'end_time' => $data['end_time'],
-    //             'location' => $data['location'] ?? null,
-    //             'description' => $data['description'] ?? null,
-    //             'cover_photo_url' => $data['cover_photo_url'] ?? null,
-    //             'event_type_id' => $data['event_type_id'] ?? null,
-    //             'mode' => $data['mode'],
-    //             'physical_type' => $data['physical_type'] ?? null,
-    //             'funding_type' => $data['funding_type'] ?? null,
-    //             'surprise_contribution' => $data['surprise_contribution'] ?? false,
-    //             'created_by' => $user->id,
-    //             'donation_goal' => $data['donation_goal'] ?? null,
-    //             'is_show_donation' => $data['is_show_donation'] ?? false,
-    //             'donation_deadline' => $data['donation_deadline'] ?? null,
-
-    //         ]);
-
-
-    //         EventMember::create([
-    //             'event_id' => $event->id,
-    //             'user_id' => $user->id,
-    //             'role' => 'host',
-    //             'status' => 'joined',
-    //         ]);
-
-
-    //         if (!empty($data['cohost_ids'])) {
-    //             foreach ($data['cohost_ids'] as $coId) {
-    //                 if ($coId == $user->id)
-    //                     continue;
-    //                 EventMember::create([
-    //                     'event_id' => $event->id,
-    //                     'user_id' => $coId,
-    //                     'role' => 'cohost',
-    //                     'status' => 'joined',
-    //                 ]);
-    //             }
-    //         }
-
-
-    //         $members = $data['member_ids'] ?? [];
-    //         foreach ($members as $memberId) {
-    //             if ($memberId == $user->id)
-    //                 continue;
-    //             EventMember::firstOrCreate([
-    //                 'event_id' => $event->id,
-    //                 'user_id' => $memberId
-    //             ], [
-    //                 'role' => 'member',
-    //                 'status' => 'joined',
-    //             ]);
-    //         }
-
-
-    //         if ($event->mode == 'physical' && $event->physical_type == 'group_vote') {
-    //             $poll = Poll::create([
-    //                 'event_id' => $event->id,
-    //                 'created_by' => $user->id,
-    //                 'status' => 'active',
-    //                 'question' => 'Who should host the event?',
-    //                 'auto_poll' => true,
-    //                 'poll_date' => $data['poll_date'] ?? $event->date,
-    //             ]);
-
-    //             $memberRecords = EventMember::where('event_id', $event->id)->get();
-    //             foreach ($memberRecords as $m) {
-    //                 PollCandidate::create([
-    //                     'poll_id' => $poll->id,
-    //                     'candidate_id' => $m->user_id,
-    //                 ]);
-    //             }
-    //         }
-
-    //         DB::commit();
-    //         return $this->sendResponse("Event created successfully", $event->load('members', 'category', 'creator'), 201);
-
-    //     } catch (\Exception $e) {
-    //         DB::rollBack();
-    //         return $this->sendError("Event creation failed", $e->getMessage(), 500);
-    //     }
-    // }
 
 
 public function store(Request $request)
@@ -313,6 +41,7 @@ public function store(Request $request)
         'cohost_ids' => 'nullable|array',
         'cohost_ids.*' => 'exists:users,id',
         'poll_date' => 'nullable|date',
+        'poll_end_time' => 'nullable|date_format:H:i',
 
         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
@@ -325,12 +54,10 @@ public function store(Request $request)
         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
 
-        // Case 1: Donation deadline after event start
         if ($donationDeadline->greaterThanOrEqualTo($eventStart)) {
             return $this->sendError("Donation deadline must be set before the event starts.", [], 422);
         }
 
-        // Case 2: If event starts today (and created today), deadline must be 1h before start
         if (Carbon::parse($data['date'])->isToday() && Carbon::now()->isToday()) {
             if ($donationDeadline->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
                 return $this->sendError("Your event starts soon. Set the donation deadline at least 1 hour before the event begins.", [], 422);
@@ -338,19 +65,22 @@ public function store(Request $request)
         }
     }
 
-    // 👉 Custom poll_date validation
-    if (!empty($data['poll_date'])) {
-        $eventStartDate = Carbon::parse($data['date'])->startOfDay();
-        $pollDate = Carbon::parse($data['poll_date'])->startOfDay();
+    // 👉 Custom poll_date and poll_end_time validation
+    if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
+        $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
 
-        // if ($pollDate->greaterThanOrEqualTo($eventStartDate)) {
-        //     return $this->sendError("Poll date must be set before the event date.", [], 422);
-        // }
+        $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
+        $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse($data['poll_date'] . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
 
-        if ($pollDate->greaterThan($eventStartDate)) {
-    return $this->sendError("Poll date must not be after the event date.", [], 422);
-}
+        if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
+            return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
+        }
 
+        if (Carbon::parse($data['date'])->isToday() && Carbon::now()->isToday()) {
+            if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+                return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
+            }
+        }
     }
 
     if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
@@ -444,66 +174,163 @@ public function store(Request $request)
 
 
 
-    // List all events
-// public function index(Request $request)
+
+
+
+// public function store(Request $request)
 // {
-//     $perPage = $request->get("per_page", 10);
-//     $search  = $request->get(key: "search"); // 🔹 search param get kiya
+//     $user = $request->user();
 
-//     $eventsQuery = Event::with([
-//         'creator:id,first_name,last_name,email,profile_image',
-//         'category',
-//         'members.user:id,first_name,last_name,profile_image',
-//         'polls.candidates.candidate:id,first_name,last_name,profile_image',
-//         'polls.votes',
-//         'posts.user:id,first_name,last_name,profile_image',    // Posts and the user who posted them
-//         'posts.likes',
-//         'posts.likes.user:id,first_name,last_name,profile_image',                                       // Likes on posts
-//         'posts.comments.user:id,first_name,last_name,profile_image',  // Comments and the users who commented
-//         'posts.comments.likes',
-//         'posts.comments.likes.user:id,first_name,last_name,profile_image',                                // Likes on comments
-//         'posts.comments.replies.user:id,first_name,last_name,profile_image', // Replies to comments
-//         'posts.comments.replies.likes'                         // Likes on replies
-//     ]) ->latest();
+//     $data = $request->validate([
+//         'title' => 'required|string|max:255',
+//         'date' => 'required|date',
+//         'start_time' => 'required',
+//         'end_time' => 'required',
+//         'location' => 'nullable|string|max:1000',
+//         'description' => 'nullable|string',
+//         'cover_photo_url' => 'nullable|url',
+//         'event_type_id' => 'nullable|exists:event_categories,id',
+//         'mode' => ['required', Rule::in(['online', 'physical'])],
+//         'physical_type' => ['nullable', Rule::in(['self_host', 'group_vote'])],
+//         'funding_type' => ['nullable', Rule::in(['self_financed', 'donation_based'])],
+//         'surprise_contribution' => 'nullable|boolean',
+//         'member_ids' => 'nullable|array',
+//         'member_ids.*' => 'exists:users,id',
+//         'cohost_ids' => 'nullable|array',
+//         'cohost_ids.*' => 'exists:users,id',
+//         'poll_date' => 'nullable|date',
 
-//     // 🔹 Search filter
-//     if (!empty($search)) {
-//         $eventsQuery->where(function ($query) use ($search) {
-//             $query->where("description", "LIKE", "%{$search}%")
-//                   ->orWhere("title", "LIKE", "%{$search}%");
-//         });
+//         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
+//         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
+//         'donation_deadline' => 'nullable|date',
+//         'donation_end_time' => 'nullable|date_format:H:i',
+
+//     ]);
+
+//     // 👉 Custom donation deadline validation
+//     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time'])) {
+//         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
+//         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
+
+//         // Case 1: Donation deadline after event start
+//         if ($donationDeadline->greaterThanOrEqualTo($eventStart)) {
+//             return $this->sendError("Donation deadline must be set before the event starts.", [], 422);
+//         }
+
+//         // Case 2: If event starts today (and created today), deadline must be 1h before start
+//         if (Carbon::parse($data['date'])->isToday() && Carbon::now()->isToday()) {
+//             if ($donationDeadline->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+//                 return $this->sendError("Your event starts soon. Set the donation deadline at least 1 hour before the event begins.", [], 422);
+//             }
+//         }
 //     }
 
-//     $events = $eventsQuery->paginate($perPage)
-//         ->through(function ($event) {
-//             // Count total posts
-//             $event->total_posts = $event->posts->count();
+//     // 👉 Custom poll_date validation
+//     if (!empty($data['poll_date'])) {
+//         $eventStartDate = Carbon::parse($data['date'])->startOfDay();
+//         $pollDate = Carbon::parse($data['poll_date'])->startOfDay();
 
-//             // Iterate over posts and add counts for likes, comments, and replies
-//             $event->posts = $event->posts->map(function ($post) {
-//                 $post->likes_count = $post->likes->count();
-//                 $post->comments_count = $post->comments->count();
+//         // if ($pollDate->greaterThanOrEqualTo($eventStartDate)) {
+//         //     return $this->sendError("Poll date must be set before the event date.", [], 422);
+//         // }
 
-//                 $post->comments = $post->comments->map(function ($comment) {
-//                     $comment->likes_count = $comment->likes->count();
-//                     $comment->replies_count = $comment->replies->count();
-
-//                     $comment->replies = $comment->replies->map(function ($reply) {
-//                         $reply->likes_count = $reply->likes->count();
-//                         return $reply;
-//                     });
-
-//                     return $comment;
-//                 });
-
-//                 return $post;
-//             });
-
-//             return $event;
-//         });
-
-//     return $this->sendResponse("Events fetched successfully", $events);
+//         if ($pollDate->greaterThan($eventStartDate)) {
+//     return $this->sendError("Poll date must not be after the event date.", [], 422);
 // }
+
+//     }
+
+//     if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
+//         return $this->sendError("Surprise contribution is not allowed for donation based events.", [], 422);
+//     }
+
+//     if (($data['funding_type'] ?? null) === 'donation_based') {
+//         $data['surprise_contribution'] = false;
+//     }
+
+//     DB::beginTransaction();
+//     try {
+//         $event = Event::create([
+//             'title' => $data['title'],
+//             'date' => $data['date'],
+//             'start_time' => $data['start_time'],
+//             'end_time' => $data['end_time'],
+//             'location' => $data['location'] ?? null,
+//             'description' => $data['description'] ?? null,
+//             'cover_photo_url' => $data['cover_photo_url'] ?? null,
+//             'event_type_id' => $data['event_type_id'] ?? null,
+//             'mode' => $data['mode'],
+//             'physical_type' => $data['physical_type'] ?? null,
+//             'funding_type' => $data['funding_type'] ?? null,
+//             'surprise_contribution' => $data['surprise_contribution'] ?? false,
+//             'created_by' => $user->id,
+//             'donation_goal' => $data['donation_goal'] ?? null,
+//             'is_show_donation' => $data['is_show_donation'] ?? false,
+//             'donation_deadline' => $data['donation_deadline'] ?? null,
+//             'donation_end_time' => $data['donation_end_time'] ?? null,
+//         ]);
+
+//         EventMember::create([
+//             'event_id' => $event->id,
+//             'user_id' => $user->id,
+//             'role' => 'host',
+//             'status' => 'joined',
+//         ]);
+
+//         if (!empty($data['cohost_ids'])) {
+//             foreach ($data['cohost_ids'] as $coId) {
+//                 if ($coId == $user->id) continue;
+//                 EventMember::create([
+//                     'event_id' => $event->id,
+//                     'user_id' => $coId,
+//                     'role' => 'cohost',
+//                     'status' => 'joined',
+//                 ]);
+//             }
+//         }
+
+//         $members = $data['member_ids'] ?? [];
+//         foreach ($members as $memberId) {
+//             if ($memberId == $user->id) continue;
+//             EventMember::firstOrCreate([
+//                 'event_id' => $event->id,
+//                 'user_id' => $memberId
+//             ], [
+//                 'role' => 'member',
+//                 'status' => 'joined',
+//             ]);
+//         }
+
+//         if ($event->mode == 'physical' && $event->physical_type == 'group_vote') {
+//             $poll = Poll::create([
+//                 'event_id' => $event->id,
+//                 'created_by' => $user->id,
+//                 'status' => 'active',
+//                 'question' => 'Who should host the event?',
+//                 'auto_poll' => true,
+//                 'poll_date' => $data['poll_date'] ?? $event->date,
+//             ]);
+
+//             $memberRecords = EventMember::where('event_id', $event->id)->get();
+//             foreach ($memberRecords as $m) {
+//                 PollCandidate::create([
+//                     'poll_id' => $poll->id,
+//                     'candidate_id' => $m->user_id,
+//                 ]);
+//             }
+//         }
+
+//         DB::commit();
+//         return $this->sendResponse("Event created successfully", $event->load('members', 'category', 'creator'), 201);
+
+//     } catch (\Exception $e) {
+//         DB::rollBack();
+//         return $this->sendError("Event creation failed", $e->getMessage(), 500);
+//     }
+// }
+
+
+
 
 
 //List all events that the user is a member of.
