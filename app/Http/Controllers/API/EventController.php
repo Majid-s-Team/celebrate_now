@@ -291,7 +291,7 @@ class EventController extends Controller
     // }
 
 
-    public function store(Request $request)
+public function store(Request $request)
 {
     $user = $request->user();
 
@@ -333,8 +333,18 @@ class EventController extends Controller
         // Case 2: If event starts today (and created today), deadline must be 1h before start
         if (Carbon::parse($data['date'])->isToday() && Carbon::now()->isToday()) {
             if ($donationDeadline->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
-                return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
+                return $this->sendError("Your event starts soon. Set the donation deadline at least 1 hour before the event begins.", [], 422);
             }
+        }
+    }
+
+    // 👉 Custom poll_date validation
+    if (!empty($data['poll_date'])) {
+        $eventStartDate = Carbon::parse($data['date'])->startOfDay();
+        $pollDate = Carbon::parse($data['poll_date'])->startOfDay();
+
+        if ($pollDate->greaterThanOrEqualTo($eventStartDate)) {
+            return $this->sendError("Poll date must be set before the event date.", [], 422);
         }
     }
 
@@ -426,6 +436,7 @@ class EventController extends Controller
         return $this->sendError("Event creation failed", $e->getMessage(), 500);
     }
 }
+
 
 
     // List all events
