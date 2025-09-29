@@ -878,7 +878,6 @@ public function getEventMembers(Request $request, $eventId)
     }
 }
 
-
 public function getUserEventPolls(Request $request)
 {
     try {
@@ -909,6 +908,7 @@ public function getUserEventPolls(Request $request)
             'posts.comments.user',
             'posts.comments.replies.user',
             'posts.comments.replies.likes',
+            'category', // 👈 sahi relation
         ]);
 
         if ($eventId) {
@@ -917,6 +917,9 @@ public function getUserEventPolls(Request $request)
 
         $events = $eventsQuery->paginate($perPage)
             ->through(function ($event) {
+                // Event type name (from category relation)
+                $event->event_type = $event->category ? $event->category->name : null;
+
                 // Add total posts count
                 $event->total_posts = $event->posts->count();
 
@@ -950,6 +953,81 @@ public function getUserEventPolls(Request $request)
         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
     }
 }
+
+
+
+
+// public function getUserEventPolls(Request $request)
+// {
+//     try {
+//         $perPage = $request->get('per_page', 10);
+//         $user = auth()->user();
+//         $eventId = $request->input('event_id');
+
+//         $eventsQuery = Event::whereHas('members', function ($q) use ($user) {
+//             $q->where('user_id', $user->id);
+//         })
+//         ->with([
+//             'creator',
+//             'members.user',
+//             'polls.creator',
+//             'polls.options.addedBy',
+//             'polls.candidates.candidate',
+//             'polls.votes.voter',
+//             'polls.votes.candidate',
+//             'posts.user',
+//             'posts.media',
+//             'posts.category',
+//             'posts.tags',
+//             'posts.likes',
+//             'posts.likes.user',
+//             'posts.comments.likes',
+//             'posts.comments.likes.user',
+//             'posts.comments.replies',
+//             'posts.comments.user',
+//             'posts.comments.replies.user',
+//             'posts.comments.replies.likes',
+//         ]);
+
+//         if ($eventId) {
+//             $eventsQuery->where('id', $eventId);
+//         }
+
+//         $events = $eventsQuery->paginate($perPage)
+//             ->through(function ($event) {
+//                 // Add total posts count
+//                 $event->total_posts = $event->posts->count();
+
+//                 // Loop through posts and add counts
+//                 $event->posts = $event->posts->map(function ($post) {
+//                     $post->is_liked = $post->likes->contains('user_id', auth()->id());
+//                     $post->likes_count = $post->likes->count();
+//                     $post->comments_count = $post->comments->count();
+
+//                     $post->comments = $post->comments->map(function ($comment) {
+//                         $comment->is_liked = $comment->likes->contains('user_id', auth()->id());
+//                         $comment->likes_count = $comment->likes->count();
+//                         $comment->replies_count = $comment->replies->count();
+
+//                         $comment->replies = $comment->replies->map(function ($reply) {
+//                             $reply->likes_count = $reply->likes->count();
+//                             return $reply;
+//                         });
+
+//                         return $comment;
+//                     });
+
+//                     return $post;
+//                 });
+
+//                 return $event;
+//             });
+
+//         return $this->sendResponse('User event polls & posts fetched successfully', $events);
+//     } catch (\Exception $e) {
+//         return $this->sendError('Failed to fetch user event polls', ['error' => $e->getMessage()], 500);
+//     }
+// }
 
 
 public function deleteMember(Request $request)
