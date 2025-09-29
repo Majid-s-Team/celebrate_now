@@ -343,9 +343,14 @@ public function store(Request $request)
         $eventStartDate = Carbon::parse($data['date'])->startOfDay();
         $pollDate = Carbon::parse($data['poll_date'])->startOfDay();
 
-        if ($pollDate->greaterThanOrEqualTo($eventStartDate)) {
-            return $this->sendError("Poll date must be set before the event date.", [], 422);
-        }
+        // if ($pollDate->greaterThanOrEqualTo($eventStartDate)) {
+        //     return $this->sendError("Poll date must be set before the event date.", [], 422);
+        // }
+
+        if ($pollDate->greaterThan($eventStartDate)) {
+    return $this->sendError("Poll date must not be after the event date.", [], 422);
+}
+
     }
 
     if (($data['funding_type'] ?? null) === 'donation_based' && !empty($data['surprise_contribution']) && $data['surprise_contribution'] == true) {
