@@ -532,53 +532,117 @@ public function eventPollResults($eventId)
 
 
 
+    // public function createPoll(Request $request)
+    // {
+    //     $user = $request->user();
+
+    //     $data = $request->validate([
+    //         'event_id' => 'required|exists:events,id',
+    //         'question' => 'required|string|max:255',
+    //         'options' => 'required|array|min:1|max:6',
+    //         'options.*' => 'required|string|max:100',
+    //         'poll_date' => 'nullable|date',
+    //         'allow_member_add_option' => 'boolean',
+    //         'allow_multiple_selection' => 'boolean',
+    //     ]);
+
+    //     $lowercaseOptions = array_map('strtolower', $data['options']);
+    //     if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
+    //         return $this->sendError('Duplicate options are not allowed in a poll');
+    //     }
+
+    //     $poll = Poll::create([
+    //         'event_id' => $data['event_id'],
+    //         'created_by' => $user->id,
+    //         'question' => $data['question'],
+    //         'poll_date' => $data['poll_date'] ?? null,
+    //         'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
+    //         'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
+    //         'status' => 'active',
+    //     ]);
+
+    //     foreach ($data['options'] as $option) {
+    //         $exists = PollOption::where('poll_id', $poll->id)
+    //             ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
+    //             ->exists();
+
+    //         if ($exists) {
+    //             continue;
+    //         }
+
+    //         PollOption::create([
+    //             'poll_id' => $poll->id,
+    //             'option_text' => $option,
+    //             'added_by' => $user->id,
+    //         ]);
+    //     }
+
+    //     return $this->sendResponse('Poll created successfully', $poll->load('options'));
+    // }
+
+
+
     public function createPoll(Request $request)
-    {
-        $user = $request->user();
+{
+    $user = $request->user();
 
-        $data = $request->validate([
-            'event_id' => 'required|exists:events,id',
-            'question' => 'required|string|max:255',
-            'options' => 'required|array|min:1|max:6',
-            'options.*' => 'required|string|max:100',
-            'poll_date' => 'nullable|date',
-            'allow_member_add_option' => 'boolean',
-            'allow_multiple_selection' => 'boolean',
-        ]);
+    $data = $request->validate([
+        'event_id' => 'required|exists:events,id',
+        'question' => 'required|string|max:255',
+        'options' => 'required|array|min:1|max:6',
+        'options.*' => 'required|string|max:100',
+        'poll_date' => 'nullable|date',
+        'allow_member_add_option' => 'boolean',
+        'allow_multiple_selection' => 'boolean',
+    ]);
 
-        $lowercaseOptions = array_map('strtolower', $data['options']);
-        if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
-            return $this->sendError('Duplicate options are not allowed in a poll');
-        }
+    // Check if user is host or cohost of the event
+    $isAuthorized = EventMember::where('event_id', $data['event_id'])
+        ->where('user_id', $user->id)
+        ->whereIn('role', ['host', 'cohost'])
+        ->exists();
 
-        $poll = Poll::create([
-            'event_id' => $data['event_id'],
-            'created_by' => $user->id,
-            'question' => $data['question'],
-            'poll_date' => $data['poll_date'] ?? null,
-            'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
-            'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
-            'status' => 'active',
-        ]);
-
-        foreach ($data['options'] as $option) {
-            $exists = PollOption::where('poll_id', $poll->id)
-                ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
-                ->exists();
-
-            if ($exists) {
-                continue;
-            }
-
-            PollOption::create([
-                'poll_id' => $poll->id,
-                'option_text' => $option,
-                'added_by' => $user->id,
-            ]);
-        }
-
-        return $this->sendResponse('Poll created successfully', $poll->load('options'));
+    if (!$isAuthorized) {
+        return $this->sendError('Only the host or cohost can create a poll.', [], 403);
     }
+
+    //  Check for duplicate options
+    $lowercaseOptions = array_map('strtolower', $data['options']);
+    if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
+        return $this->sendError('Duplicate options are not allowed in a poll', [], 422);
+    }
+
+    // Create poll
+    $poll = Poll::create([
+        'event_id' => $data['event_id'],
+        'created_by' => $user->id,
+        'question' => $data['question'],
+        'poll_date' => $data['poll_date'] ?? null,
+        'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
+        'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
+        'status' => 'active',
+    ]);
+
+    //  Add options
+    foreach ($data['options'] as $option) {
+        $exists = PollOption::where('poll_id', $poll->id)
+            ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
+            ->exists();
+
+        if ($exists) {
+            continue;
+        }
+
+        PollOption::create([
+            'poll_id' => $poll->id,
+            'option_text' => $option,
+            'added_by' => $user->id,
+        ]);
+    }
+
+    return $this->sendResponse('Poll created successfully', $poll->load('options'));
+}
+
     public function updatePoll(Request $request, $pollId)
     {
         $user = $request->user();
