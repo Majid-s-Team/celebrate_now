@@ -174,6 +174,73 @@ public function store(Request $request)
 }
 
 
+public function index(Request $request)
+{
+    $user = auth()->user(); // Logged-in user
+    $perPage = $request->get("per_page", 10);
+    $search  = $request->get("search");
+
+    $eventsQuery = Event::with([
+        'creator:id,first_name,last_name,email,profile_image',
+        'category',
+        'members.user:id,first_name,last_name,profile_image',
+        'polls.candidates.candidate:id,first_name,last_name,profile_image',
+        'polls.votes',
+        'posts.user:id,first_name,last_name,profile_image',
+        'posts.likes',
+        'posts.likes.user:id,first_name,last_name,profile_image',
+        'posts.comments.user:id,first_name,last_name,profile_image',
+        'posts.comments.likes',
+        'posts.comments.likes.user:id,first_name,last_name,profile_image',
+        'posts.comments.replies.user:id,first_name,last_name,profile_image',
+        'posts.comments.replies.likes'
+    ])
+    ->whereHas('members', function ($query) use ($user) {
+        $query->where('user_id', $user->id);
+    })
+    ->latest();
+
+    // 🔹 Search filter
+    if (!empty($search)) {
+        $eventsQuery->where(function ($query) use ($search) {
+            $query->where("description", "LIKE", "%{$search}%")
+                  ->orWhere("title", "LIKE", "%{$search}%");
+        });
+    }
+
+    $events = $eventsQuery->paginate($perPage)
+        ->through(function ($event) {
+            // ✅ Add category name based on event_type_id
+            $event->event_type = $event->category->name ?? null;
+
+            // Count total posts
+            $event->total_posts = $event->posts->count();
+
+            // Iterate over posts and add counts for likes, comments, and replies
+            $event->posts = $event->posts->map(function ($post) {
+                $post->likes_count = $post->likes->count();
+                $post->comments_count = $post->comments->count();
+
+                $post->comments = $post->comments->map(function ($comment) {
+                    $comment->likes_count = $comment->likes->count();
+                    $comment->replies_count = $comment->replies->count();
+
+                    $comment->replies = $comment->replies->map(function ($reply) {
+                        $reply->likes_count = $reply->likes->count();
+                        return $reply;
+                    });
+
+                    return $comment;
+                });
+
+                return $post;
+            });
+
+            return $event;
+        });
+
+    return $this->sendResponse("Events fetched successfully", $events);
+}
 
 
 
@@ -336,70 +403,70 @@ public function store(Request $request)
 
 //List all events that the user is a member of.
 
-public function index(Request $request)
-{
-    $user = auth()->user(); // Logged-in user
-    $perPage = $request->get("per_page", 10);
-    $search  = $request->get("search");
+// public function index(Request $request)
+// {
+//     $user = auth()->user(); // Logged-in user
+//     $perPage = $request->get("per_page", 10);
+//     $search  = $request->get("search");
 
-    $eventsQuery = Event::with([
-        'creator:id,first_name,last_name,email,profile_image',
-        'category',
-        'members.user:id,first_name,last_name,profile_image',
-        'polls.candidates.candidate:id,first_name,last_name,profile_image',
-        'polls.votes',
-        'posts.user:id,first_name,last_name,profile_image',
-        'posts.likes',
-        'posts.likes.user:id,first_name,last_name,profile_image',
-        'posts.comments.user:id,first_name,last_name,profile_image',
-        'posts.comments.likes',
-        'posts.comments.likes.user:id,first_name,last_name,profile_image',
-        'posts.comments.replies.user:id,first_name,last_name,profile_image',
-        'posts.comments.replies.likes'
-    ])
-    ->whereHas('members', function ($query) use ($user) {
-        $query->where('user_id', $user->id);
-    })
-    ->latest();
+//     $eventsQuery = Event::with([
+//         'creator:id,first_name,last_name,email,profile_image',
+//         'category',
+//         'members.user:id,first_name,last_name,profile_image',
+//         'polls.candidates.candidate:id,first_name,last_name,profile_image',
+//         'polls.votes',
+//         'posts.user:id,first_name,last_name,profile_image',
+//         'posts.likes',
+//         'posts.likes.user:id,first_name,last_name,profile_image',
+//         'posts.comments.user:id,first_name,last_name,profile_image',
+//         'posts.comments.likes',
+//         'posts.comments.likes.user:id,first_name,last_name,profile_image',
+//         'posts.comments.replies.user:id,first_name,last_name,profile_image',
+//         'posts.comments.replies.likes'
+//     ])
+//     ->whereHas('members', function ($query) use ($user) {
+//         $query->where('user_id', $user->id);
+//     })
+//     ->latest();
 
-    // 🔹 Search filter
-    if (!empty($search)) {
-        $eventsQuery->where(function ($query) use ($search) {
-            $query->where("description", "LIKE", "%{$search}%")
-                  ->orWhere("title", "LIKE", "%{$search}%");
-        });
-    }
+//     // 🔹 Search filter
+//     if (!empty($search)) {
+//         $eventsQuery->where(function ($query) use ($search) {
+//             $query->where("description", "LIKE", "%{$search}%")
+//                   ->orWhere("title", "LIKE", "%{$search}%");
+//         });
+//     }
 
-    $events = $eventsQuery->paginate($perPage)
-        ->through(function ($event) {
-            // Count total posts
-            $event->total_posts = $event->posts->count();
+//     $events = $eventsQuery->paginate($perPage)
+//         ->through(function ($event) {
+//             // Count total posts
+//             $event->total_posts = $event->posts->count();
 
-            // Iterate over posts and add counts for likes, comments, and replies
-            $event->posts = $event->posts->map(function ($post) {
-                $post->likes_count = $post->likes->count();
-                $post->comments_count = $post->comments->count();
+//             // Iterate over posts and add counts for likes, comments, and replies
+//             $event->posts = $event->posts->map(function ($post) {
+//                 $post->likes_count = $post->likes->count();
+//                 $post->comments_count = $post->comments->count();
 
-                $post->comments = $post->comments->map(function ($comment) {
-                    $comment->likes_count = $comment->likes->count();
-                    $comment->replies_count = $comment->replies->count();
+//                 $post->comments = $post->comments->map(function ($comment) {
+//                     $comment->likes_count = $comment->likes->count();
+//                     $comment->replies_count = $comment->replies->count();
 
-                    $comment->replies = $comment->replies->map(function ($reply) {
-                        $reply->likes_count = $reply->likes->count();
-                        return $reply;
-                    });
+//                     $comment->replies = $comment->replies->map(function ($reply) {
+//                         $reply->likes_count = $reply->likes->count();
+//                         return $reply;
+//                     });
 
-                    return $comment;
-                });
+//                     return $comment;
+//                 });
 
-                return $post;
-            });
+//                 return $post;
+//             });
 
-            return $event;
-        });
+//             return $event;
+//         });
 
-    return $this->sendResponse("Events fetched successfully", $events);
-}
+//     return $this->sendResponse("Events fetched successfully", $events);
+// }
 
 
 
@@ -424,29 +491,28 @@ public function index(Request $request)
 
     //Show single event (of which the user is a member of.)
 
-    public function show(Request $request, $id)
-{
-    $user = auth()->user(); // Logged-in user
+//     public function show(Request $request, $id)
+// {
+//     $user = auth()->user(); // Logged-in user
+//     // Fetch the event only if the user is a member
+//     $event = Event::with([
+//         'creator:id,first_name,last_name,email,profile_image',
+//         'category',
+//         'members.user:id,first_name,last_name,profile_image',
+//         'polls.candidates.candidate:id,first_name,last_name,profile_image',
+//         'polls.votes'
+//     ])
+//     ->whereHas('members', function ($query) use ($user) {
+//         $query->where('user_id', $user->id);
+//     })
+//     ->find($id);
 
-    // Fetch the event only if the user is a member
-    $event = Event::with([
-        'creator:id,first_name,last_name,email,profile_image',
-        'category',
-        'members.user:id,first_name,last_name,profile_image',
-        'polls.candidates.candidate:id,first_name,last_name,profile_image',
-        'polls.votes'
-    ])
-    ->whereHas('members', function ($query) use ($user) {
-        $query->where('user_id', $user->id);
-    })
-    ->find($id);
+//     if (!$event) {
+//         return $this->sendError("Event not found or you are not a member", [], 404);
+//     }
 
-    if (!$event) {
-        return $this->sendError("Event not found or you are not a member", [], 404);
-    }
-
-    return $this->sendResponse("Event fetched successfully", $event);
-}
+//     return $this->sendResponse("Event fetched successfully", $event);
+// }
 
 
     // Update event
@@ -572,6 +638,35 @@ public function index(Request $request)
     //         return $this->sendError("Update failed", $e->getMessage(), 500);
     //     }
     // }
+
+
+    public function show(Request $request, $id)
+{
+    $user = auth()->user(); // Logged-in user
+
+    // Fetch the event only if the user is a member
+    $event = Event::with([
+        'creator:id,first_name,last_name,email,profile_image',
+        'category',
+        'members.user:id,first_name,last_name,profile_image',
+        'polls.candidates.candidate:id,first_name,last_name,profile_image',
+        'polls.votes'
+    ])
+    ->whereHas('members', function ($query) use ($user) {
+        $query->where('user_id', $user->id);
+    })
+    ->find($id);
+
+    if (!$event) {
+        return $this->sendError("Event not found or you are not a member", [], 404);
+    }
+
+    // ✅Add category name based on event_type_id
+    $event->event_type = $event->category->name ?? null;
+
+    return $this->sendResponse("Event fetched successfully", $event);
+}
+
 
 public function update(Request $request, $id)
 {
