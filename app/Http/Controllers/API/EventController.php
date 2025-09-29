@@ -152,6 +152,7 @@ public function store(Request $request)
                 'question' => 'Who should host the event?',
                 'auto_poll' => true,
                 'poll_date' => $data['poll_date'] ?? $event->date,
+                'poll_end_time' => $data['poll_end_time'] ?? '00:00:00',
             ]);
 
             $memberRecords = EventMember::where('event_id', $event->id)->get();
@@ -449,128 +450,284 @@ public function index(Request $request)
 
 
     // Update event
-    public function update(Request $request, $id)
-    {
-        $user = $request->user();
-        $event = Event::find($id);
-        if (!$event)
-            return $this->sendError("Event not found", [], 404);
+    // public function update(Request $request, $id)
+    // {
+    //     $user = $request->user();
+    //     $event = Event::find($id);
+    //     if (!$event)
+    //         return $this->sendError("Event not found", [], 404);
 
-        if ($event->created_by != $user->id) {
-            return $this->sendError("Unauthorized", [], 403);
+    //     if ($event->created_by != $user->id) {
+    //         return $this->sendError("Unauthorized", [], 403);
+    //     }
+
+    //     $data = $request->validate([
+    //         'title' => 'nullable|string|max:255',
+    //         'date' => 'nullable|date',
+    //         'start_time' => 'nullable',
+    //         'end_time' => 'nullable',
+    //         'location' => 'nullable|string|max:1000',
+    //         'description' => 'nullable|string',
+    //         'cover_photo_url' => 'nullable|url',
+    //         'event_type_id' => 'nullable|exists:event_categories,id',
+    //         'mode' => [Rule::in(['online', 'physical'])],
+    //         'physical_type' => [Rule::in(['self_host', 'group_vote'])],
+    //         'funding_type' => [Rule::in(['self_financed', 'donation_based'])],
+    //         'surprise_contribution' => 'nullable|boolean',
+    //         'member_ids' => 'nullable|array',
+    //         'member_ids.*' => 'exists:users,id',
+    //         'cohost_ids' => 'nullable|array',
+    //         'cohost_ids.*' => 'exists:users,id',
+    //         'poll_date' => 'nullable|date',
+    //         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
+    //         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
+    //         'donation_deadline' => 'nullable|date|after:date'
+    //         // 'contribution_from_members' => 'nullable|array',
+    //         // 'contribution_from_members.*'=>'exists:users,id'
+    //     ]);
+
+    //     DB::beginTransaction();
+    //     try {
+    //         $event->update(array_filter($data, fn($value) => !is_null($value)));
+
+    //         if ($event->funding_type === 'donation_based') {
+    //             $event->donation_goal = $data['donation_goal'];
+    //             // $event->contribution_from_members = $data['contribution_from_members'] ?? 0;
+    //             $event->donation_deadline = $data['donation_deadline'] ?? null;
+    //             $event->save();
+    //         } else {
+
+    //             $event->donation_goal = null;
+    //             // $event->contribution_from_members = false;
+    //             $event->donation_deadline = null;
+    //             $event->save();
+    //         }
+
+
+    //         if (isset($data['cohost_ids'])) {
+    //             EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
+    //             foreach ($data['cohost_ids'] as $coId) {
+    //                 if ($coId == $event->created_by)
+    //                     continue;
+    //                 EventMember::updateOrCreate(
+    //                     ['event_id' => $event->id, 'user_id' => $coId],
+    //                     ['role' => 'cohost', 'status' => 'joined']
+    //                 );
+    //             }
+    //         }
+
+
+    //         if (isset($data['member_ids'])) {
+    //             $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
+    //             EventMember::where('event_id', $event->id)->where('role', 'member')->whereNotIn('user_id', $incoming)->delete();
+    //             foreach ($incoming as $memberId) {
+    //                 EventMember::updateOrCreate(
+    //                     ['event_id' => $event->id, 'user_id' => $memberId],
+    //                     ['role' => 'member', 'status' => 'joined']
+    //                 );
+    //             }
+    //         }
+
+
+    //         if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
+    //             $poll = $event->polls()->first();
+    //             if (!$poll) {
+    //                 $poll = Poll::create([
+    //                     'event_id' => $event->id,
+    //                     'created_by' => $user->id,
+    //                     'status' => 'active',
+    //                     'poll_date' => $data['poll_date'] ?? $event->date,
+    //                 ]);
+    //                 $members = EventMember::where('event_id', $event->id)->get();
+    //                 foreach ($members as $m) {
+    //                     PollCandidate::create([
+    //                         'poll_id' => $poll->id,
+    //                         'candidate_id' => $m->user_id,
+    //                     ]);
+    //                 }
+    //             } elseif (isset($data['poll_date'])) {
+    //                 $poll->update(['poll_date' => $data['poll_date']]);
+    //             }
+    //         }
+
+
+    //         if (
+    //             $event->mode === 'online' ||
+    //             ($event->mode === 'physical' && $event->physical_type === 'self_host')
+    //         ) {
+    //             $polls = $event->polls()->get();
+    //             foreach ($polls as $poll) {
+    //                 $poll->votes()->delete();
+    //                 if (method_exists($poll, 'candidates')) {
+    //                     $poll->candidates()->delete();
+    //                 }
+    //                 $poll->delete();
+    //             }
+    //         }
+
+    //         DB::commit();
+    //         return $this->sendResponse("Event updated successfully", $event->load('members', 'polls'));
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         return $this->sendError("Update failed", $e->getMessage(), 500);
+    //     }
+    // }
+
+public function update(Request $request, $id)
+{
+    $user = $request->user();
+    $event = Event::find($id);
+    if (!$event)
+        return $this->sendError("Event not found", [], 404);
+
+    if ($event->created_by != $user->id) {
+        return $this->sendError("Unauthorized", [], 403);
+    }
+
+
+    $data = $request->validate([
+        'title' => 'nullable|string|max:255',
+        'date' => 'nullable|date',
+        'start_time' => 'nullable',
+        'end_time' => 'nullable',
+        'location' => 'nullable|string|max:1000',
+        'description' => 'nullable|string',
+        'cover_photo_url' => 'nullable|url',
+        'event_type_id' => 'nullable|exists:event_categories,id',
+        'mode' => [Rule::in(['online', 'physical'])],
+        'physical_type' => [Rule::in(['self_host', 'group_vote'])],
+        'funding_type' => [Rule::in(['self_financed', 'donation_based'])],
+        'surprise_contribution' => 'nullable|boolean',
+        'member_ids' => 'nullable|array',
+        'member_ids.*' => 'exists:users,id',
+        'cohost_ids' => 'nullable|array',
+        'cohost_ids.*' => 'exists:users,id',
+        'poll_date' => 'nullable|date',
+        'poll_end_time' => 'nullable|date_format:H:i',
+        'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
+        'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
+        'donation_deadline' => 'nullable|date',
+        'donation_end_time' => 'nullable|date_format:H:i',
+    ]);
+
+
+
+    // Custom donation deadline validation
+    if (!empty($data['donation_deadline']) && !empty($data['donation_end_time']) && !empty($data['date']) && !empty($data['start_time'])) {
+        $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
+        $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
+
+        if ($donationDeadline->greaterThanOrEqualTo($eventStart)) {
+            return $this->sendError("Donation deadline must be set before the event starts.", [], 422);
         }
 
-        $data = $request->validate([
-            'title' => 'nullable|string|max:255',
-            'date' => 'nullable|date',
-            'start_time' => 'nullable',
-            'end_time' => 'nullable',
-            'location' => 'nullable|string|max:1000',
-            'description' => 'nullable|string',
-            'cover_photo_url' => 'nullable|url',
-            'event_type_id' => 'nullable|exists:event_categories,id',
-            'mode' => [Rule::in(['online', 'physical'])],
-            'physical_type' => [Rule::in(['self_host', 'group_vote'])],
-            'funding_type' => [Rule::in(['self_financed', 'donation_based'])],
-            'surprise_contribution' => 'nullable|boolean',
-            'member_ids' => 'nullable|array',
-            'member_ids.*' => 'exists:users,id',
-            'cohost_ids' => 'nullable|array',
-            'cohost_ids.*' => 'exists:users,id',
-            'poll_date' => 'nullable|date',
-            'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
-            'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
-            'donation_deadline' => 'nullable|date|after:date'
-            // 'contribution_from_members' => 'nullable|array',
-            // 'contribution_from_members.*'=>'exists:users,id'
-        ]);
-
-        DB::beginTransaction();
-        try {
-            $event->update(array_filter($data, fn($value) => !is_null($value)));
-
-            if ($event->funding_type === 'donation_based') {
-                $event->donation_goal = $data['donation_goal'];
-                // $event->contribution_from_members = $data['contribution_from_members'] ?? 0;
-                $event->donation_deadline = $data['donation_deadline'] ?? null;
-                $event->save();
-            } else {
-
-                $event->donation_goal = null;
-                // $event->contribution_from_members = false;
-                $event->donation_deadline = null;
-                $event->save();
+        if (Carbon::parse($data['date'] ?? $event->date)->isToday() && Carbon::now()->isToday()) {
+            if ($donationDeadline->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+                return $this->sendError("Your event starts soon. Set the donation deadline at least 1 hour before the event begins.", [], 422);
             }
-
-
-            if (isset($data['cohost_ids'])) {
-                EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
-                foreach ($data['cohost_ids'] as $coId) {
-                    if ($coId == $event->created_by)
-                        continue;
-                    EventMember::updateOrCreate(
-                        ['event_id' => $event->id, 'user_id' => $coId],
-                        ['role' => 'cohost', 'status' => 'joined']
-                    );
-                }
-            }
-
-
-            if (isset($data['member_ids'])) {
-                $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
-                EventMember::where('event_id', $event->id)->where('role', 'member')->whereNotIn('user_id', $incoming)->delete();
-                foreach ($incoming as $memberId) {
-                    EventMember::updateOrCreate(
-                        ['event_id' => $event->id, 'user_id' => $memberId],
-                        ['role' => 'member', 'status' => 'joined']
-                    );
-                }
-            }
-
-
-            if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
-                $poll = $event->polls()->first();
-                if (!$poll) {
-                    $poll = Poll::create([
-                        'event_id' => $event->id,
-                        'created_by' => $user->id,
-                        'status' => 'active',
-                        'poll_date' => $data['poll_date'] ?? $event->date,
-                    ]);
-                    $members = EventMember::where('event_id', $event->id)->get();
-                    foreach ($members as $m) {
-                        PollCandidate::create([
-                            'poll_id' => $poll->id,
-                            'candidate_id' => $m->user_id,
-                        ]);
-                    }
-                } elseif (isset($data['poll_date'])) {
-                    $poll->update(['poll_date' => $data['poll_date']]);
-                }
-            }
-
-
-            if (
-                $event->mode === 'online' ||
-                ($event->mode === 'physical' && $event->physical_type === 'self_host')
-            ) {
-                $polls = $event->polls()->get();
-                foreach ($polls as $poll) {
-                    $poll->votes()->delete();
-                    if (method_exists($poll, 'candidates')) {
-                        $poll->candidates()->delete();
-                    }
-                    $poll->delete();
-                }
-            }
-
-            DB::commit();
-            return $this->sendResponse("Event updated successfully", $event->load('members', 'polls'));
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return $this->sendError("Update failed", $e->getMessage(), 500);
         }
     }
+
+    // Custom poll_date and poll_end_time validation
+    if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
+        $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
+
+        $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
+        $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse(($data['poll_date'] ?? $event->date) . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
+
+        if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
+            return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
+        }
+
+        if (Carbon::parse($data['date'] ?? $event->date)->isToday() && Carbon::now()->isToday()) {
+            if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+                return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
+            }
+        }
+    }
+
+    DB::beginTransaction();
+    try {
+        $event->update(array_filter($data, fn($value) => !is_null($value)));
+
+        if ($event->funding_type === 'donation_based') {
+            $event->donation_goal = $data['donation_goal'] ?? $event->donation_goal;
+            $event->donation_deadline = $data['donation_deadline'] ?? $event->donation_deadline;
+            $event->is_show_donation = $data['is_show_donation'] ?? $event->is_show_donation;
+            $event->save();
+        } else {
+            $event->donation_goal = null;
+            $event->donation_deadline = null;
+            $event->is_show_donation = false;
+            $event->save();
+        }
+
+        if (isset($data['cohost_ids'])) {
+            EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
+            foreach ($data['cohost_ids'] as $coId) {
+                if ($coId == $event->created_by) continue;
+                EventMember::updateOrCreate(
+                    ['event_id' => $event->id, 'user_id' => $coId],
+                    ['role' => 'cohost', 'status' => 'joined']
+                );
+            }
+        }
+
+        if (isset($data['member_ids'])) {
+            $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
+            EventMember::where('event_id', $event->id)->where('role', 'member')->whereNotIn('user_id', $incoming)->delete();
+            foreach ($incoming as $memberId) {
+                EventMember::updateOrCreate(
+                    ['event_id' => $event->id, 'user_id' => $memberId],
+                    ['role' => 'member', 'status' => 'joined']
+                );
+            }
+        }
+
+        if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
+            $poll = $event->polls()->first();
+            if (!$poll) {
+                $poll = Poll::create([
+                    'event_id' => $event->id,
+                    'created_by' => $user->id,
+                    'status' => 'active',
+                    'poll_date' => $data['poll_date'] ?? $event->date,
+                ]);
+                $members = EventMember::where('event_id', $event->id)->get();
+                foreach ($members as $m) {
+                    PollCandidate::create([
+                        'poll_id' => $poll->id,
+                        'candidate_id' => $m->user_id,
+                    ]);
+                }
+            } elseif (isset($data['poll_date'])) {
+                $poll->update(['poll_date' => $data['poll_date']]);
+            }
+        }
+
+        if (
+            $event->mode === 'online' ||
+            ($event->mode === 'physical' && $event->physical_type === 'self_host')
+        ) {
+            $polls = $event->polls()->get();
+            foreach ($polls as $poll) {
+                $poll->votes()->delete();
+                if (method_exists($poll, 'candidates')) {
+                    $poll->candidates()->delete();
+                }
+                $poll->delete();
+            }
+        }
+
+        DB::commit();
+        return $this->sendResponse("Event updated successfully", $event->load('members', 'polls'));
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return $this->sendError("Update failed", $e->getMessage(), 500);
+    }
+}
+
+
 
 
     public function groupMembersForVote($eventId)

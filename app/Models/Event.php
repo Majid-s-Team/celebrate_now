@@ -16,7 +16,7 @@ class Event extends Model
         'description', 'cover_photo_url', 'event_type_id',
         'mode', 'physical_type', 'funding_type',
         'surprise_contribution', 'created_by',
-        'donation_goal', 'is_show_donation', 'donation_deadline'
+        'donation_goal', 'is_show_donation', 'donation_deadline','donation_end_time'
 
     ];
 
