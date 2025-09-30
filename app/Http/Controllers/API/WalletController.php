@@ -76,10 +76,12 @@ class WalletController extends Controller
                     'created_at' => $d->created_at->toDateTimeString(),
                 ];
             });
-        } else {
+        }else {
             $hostId = $event->created_by;
+            if($authId==$hostId)
+            {
             $donors = $event->donations
-                ->where('user_id', $hostId)
+                // ->where('user_id', $hostId)
                 ->map(function ($d) {
                     return [
                         'user_id' => $d->user->id,
@@ -90,8 +92,8 @@ class WalletController extends Controller
                     ];
                 })
                 ->values();
+}
         }
-
         $surpriseContributors = [];
         if ($event->surprise_contribution) {
 
