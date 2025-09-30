@@ -91,7 +91,7 @@ class TransactionController extends Controller
             $senderWallet->refresh()->lockForUpdate();
 
             if ($senderWallet->balance < $coins) {
-                abort(422, 'Insufficient balance');
+               return $this->sendError('Insufficient balance. Please add funds to your wallet before proceeding.',[], 422);
             }
 
             $receiverWallet = Wallet::firstOrCreate(
