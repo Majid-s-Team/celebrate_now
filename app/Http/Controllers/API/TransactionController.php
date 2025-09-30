@@ -209,7 +209,7 @@ public function send(Request $request)
 
         if ($senderWallet->balance < $coins) {
             return $this->sendError(
-                'Insufficient balance. Please add funds to your wallet before proceeding.',
+                'You don’t have enough coins. Please purchase coins to donate.',
                 [],
                 422
             );
