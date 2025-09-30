@@ -529,25 +529,22 @@ public function eventPollResults($eventId)
         'polls'       => $results,
     ]);
 }
-
-
 public function createPoll(Request $request)
 {
     $user = $request->user();
 
-    // ✅ Validate request inputs
+    // Validate request inputs
     $data = $request->validate([
         'event_id' => 'required|exists:events,id',
         'question' => 'required|string|max:255',
         'options' => 'required|array|min:1|max:6',
         'options.*' => 'required|string|max:100',
         'poll_date' => 'nullable|date',
-        'poll_end_time' => 'nullable|date_format:H:i',
         'allow_member_add_option' => 'boolean',
         'allow_multiple_selection' => 'boolean',
     ]);
 
-    // ✅ Check if user is host or cohost of the event
+    // Check if user is host or cohost of the event
     $isAuthorized = EventMember::where('event_id', $data['event_id'])
         ->where('user_id', $user->id)
         ->whereIn('role', ['host', 'cohost'])
@@ -557,52 +554,44 @@ public function createPoll(Request $request)
         return $this->sendError('Only the host or cohost can create a poll.', [], 403);
     }
 
-    // ✅ Fetch event start datetime
+    // Fetch event start datetime
     $event = Event::find($data['event_id']);
     $eventStart = Carbon::parse($event->date . ' ' . $event->start_time);
 
-    // ✅ Poll date and end time validation
-    if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
-        $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
-        $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse($pollDate->format('Y-m-d') . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
+    // Poll date validation
+    if (!empty($data['poll_date'])) {
+        $pollDate = Carbon::parse($data['poll_date']);
 
         // Poll date must not be after event date (same day allowed)
         if ($pollDate->startOfDay()->gt($eventStart->copy()->startOfDay())) {
             return $this->sendError("Poll date must not be after the event date.", [], 422);
         }
 
-        // Poll end must be before event start
-        if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
-            return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins", [], 422);
-        }
-
-        // If event is today, poll_end_time must be at least 1 hour before event start
-        if ($eventStart->isToday() && Carbon::now()->isToday()) {
-            if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
-                return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
-            }
-        }
+        // Agar poll_date valid hai → end time = 23:59:00
+        $pollEndTime = "23:59:00";
+    } else {
+        $pollEndTime = "00:00:00";
     }
 
-    // ✅ Check for duplicate options
+    // Check for duplicate options
     $lowercaseOptions = array_map('strtolower', $data['options']);
     if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
         return $this->sendError('Duplicate options are not allowed in a poll', [], 422);
     }
 
-    // ✅ Create the poll
+    // Create the poll
     $poll = Poll::create([
         'event_id' => $data['event_id'],
         'created_by' => $user->id,
         'question' => $data['question'],
         'poll_date' => $data['poll_date'] ?? null,
-        'poll_end_time' => $data['poll_end_time'] ?? "00:00:00",
+        'poll_end_time' => $pollEndTime, // ✅ Auto set
         'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
         'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
         'status' => 'active',
     ]);
 
-    // ✅ Add poll options
+    // Add poll options
     foreach ($data['options'] as $option) {
         $exists = PollOption::where('poll_id', $poll->id)
             ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
@@ -617,9 +606,100 @@ public function createPoll(Request $request)
         ]);
     }
 
-    // ✅ Return response with poll and options
+    // Return response with poll and options
     return $this->sendResponse('Poll created successfully', $poll->load('options'));
 }
+
+
+// public function createPoll(Request $request)
+// {
+//     $user = $request->user();
+
+//     // ✅ Validate request inputs
+//     $data = $request->validate([
+//         'event_id' => 'required|exists:events,id',
+//         'question' => 'required|string|max:255',
+//         'options' => 'required|array|min:1|max:6',
+//         'options.*' => 'required|string|max:100',
+//         'poll_date' => 'nullable|date',
+//         'poll_end_time' => 'nullable|date_format:H:i',
+//         'allow_member_add_option' => 'boolean',
+//         'allow_multiple_selection' => 'boolean',
+//     ]);
+
+//     // Check if user is host or cohost of the event
+//     $isAuthorized = EventMember::where('event_id', $data['event_id'])
+//         ->where('user_id', $user->id)
+//         ->whereIn('role', ['host', 'cohost'])
+//         ->exists();
+
+//     if (!$isAuthorized) {
+//         return $this->sendError('Only the host or cohost can create a poll.', [], 403);
+//     }
+
+//     // Fetch event start datetime
+//     $event = Event::find($data['event_id']);
+//     $eventStart = Carbon::parse($event->date . ' ' . $event->start_time);
+
+//     // Poll date and end time validation
+//     if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
+//         $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
+//         $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse($pollDate->format('Y-m-d') . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
+
+//         // Poll date must not be after event date (same day allowed)
+//         if ($pollDate->startOfDay()->gt($eventStart->copy()->startOfDay())) {
+//             return $this->sendError("Poll date must not be after the event date.", [], 422);
+//         }
+
+//         // Poll end must be before event start
+//         if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
+//             return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins", [], 422);
+//         }
+
+//         // If event is today, poll_end_time must be at least 1 hour before event start
+//         if ($eventStart->isToday() && Carbon::now()->isToday()) {
+//             if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+//                 return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
+//             }
+//         }
+//     }
+
+//     // ✅ Check for duplicate options
+//     $lowercaseOptions = array_map('strtolower', $data['options']);
+//     if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
+//         return $this->sendError('Duplicate options are not allowed in a poll', [], 422);
+//     }
+
+//     // ✅ Create the poll
+//     $poll = Poll::create([
+//         'event_id' => $data['event_id'],
+//         'created_by' => $user->id,
+//         'question' => $data['question'],
+//         'poll_date' => $data['poll_date'] ?? null,
+//         'poll_end_time' => $data['poll_end_time'] ?? "00:00:00",
+//         'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
+//         'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
+//         'status' => 'active',
+//     ]);
+
+//     // ✅ Add poll options
+//     foreach ($data['options'] as $option) {
+//         $exists = PollOption::where('poll_id', $poll->id)
+//             ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
+//             ->exists();
+
+//         if ($exists) continue;
+
+//         PollOption::create([
+//             'poll_id' => $poll->id,
+//             'option_text' => $option,
+//             'added_by' => $user->id,
+//         ]);
+//     }
+
+//     // ✅ Return response with poll and options
+//     return $this->sendResponse('Poll created successfully', $poll->load('options'));
+// }
 
 public function updatePoll(Request $request, $pollId)
 {

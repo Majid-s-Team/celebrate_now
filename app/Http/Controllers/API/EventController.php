@@ -71,8 +71,7 @@ public function store(Request $request)
 
         $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
         $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse($data['poll_date'] . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
-
-        if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
+        if ($pollEnd->greaterThan($eventStart)) {
             return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
         }
 
@@ -704,8 +703,6 @@ public function update(Request $request, $id)
         'donation_deadline' => 'nullable|date',
         'donation_end_time' => 'nullable|date_format:H:i',
     ]);
-
-
 
     // Custom donation deadline validation
     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time']) && !empty($data['date']) && !empty($data['start_time'])) {
