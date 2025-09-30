@@ -31,10 +31,127 @@ class TransactionController extends Controller
     // Jo bhi bhejega uska record "surprise" contribution ke sath save hoga.
     // Receiver phir bhi event creator hoga, lekin contribution_type = surprise.
     // Validation same (no self transfer).
-  public function send(Request $request)
+//   public function send(Request $request)
+// {
+//     try {
+//          $type  = $request->get(key: "type");
+//         $data = $request->validate([
+//             'coins' => ['required', 'integer', 'min:1'],
+//             'message' => ['nullable', 'string', 'max:1000'],
+//             'post_id' => ['nullable', 'exists:posts,id'],
+//             'event_id' => ['nullable', 'exists:events,id'],
+//         ]);
+
+//         $sender = auth()->user();
+//         $coins = (int) $data['coins'];
+//         $note = $data['message'] ?? null;
+
+//         $receiverId = null;
+//         $eventId = $data['event_id'] ?? null;
+//         $postId = $data['post_id'] ?? null;
+//         $contributionType = null;
+
+//         if (!empty($postId)) {
+//             $post = Post::findOrFail($postId);
+//             $receiverId = $post->user_id;
+//             $contributionType = 'donation';
+//         } elseif (!empty($eventId)) {
+//             $event = Event::findOrFail($eventId);
+//             $receiverId = $event->created_by;
+
+//             $eventStart = Carbon::parse($event->date . ' ' . $event->start_time);
+//             if (now()->greaterThanOrEqualTo($eventStart)) {
+//                 return $this->sendError('Event has already started or ended, cannot contribute.', [], 422);
+//             }
+
+//             if ($event->funding_type === 'donation_based') {
+//                 $contributionType = 'donation';
+//             } elseif ($event->funding_type === 'self_financed') {
+//                 if ($event->surprise_contribution) {
+//                     $contributionType = 'surprise';
+//                 } else {
+//                     return $this->sendError('Surprise contribution not allowed for this event.', [], 422);
+//                 }
+//             }
+//         }
+
+//         if (!$receiverId) {
+//             return $this->sendError('Invalid contribution target', [], 422);
+//         }
+
+//         if ($receiverId === $sender->id) {
+//             return $this->sendError('Cannot send coins to yourself', [], 422);
+//         }
+
+//         DB::transaction(function () use ($sender, $receiverId, $coins, $note, $postId, $eventId, $contributionType) {
+//             $senderWallet = Wallet::firstOrCreate(
+//                 ['user_id' => $sender->id],
+//                 ['balance' => 0]
+//             );
+//             $senderWallet->refresh()->lockForUpdate();
+
+//             if ($senderWallet->balance < $coins) {
+//                return $this->sendError('Insufficient balance. Please add funds to your wallet before proceeding.',[], 422);
+//             }
+
+//             $receiverWallet = Wallet::firstOrCreate(
+//                 ['user_id' => $receiverId],
+//                 ['balance' => 0]
+//             );
+//             $receiverWallet->refresh()->lockForUpdate();
+
+//             $senderWallet->decrement('balance', $coins);
+//             $receiverWallet->increment('balance', $coins);
+
+//             // Log in coin_transactions (send)
+//             CoinTransaction::create([
+//                 'sender_id' => $sender->id,
+//                 'receiver_id' => $receiverId,
+//                 'coin_package_id' => null,
+//                 'post_id' => $postId,
+//                 'event_id' => $eventId,
+//                 'coins' => $coins,
+//                 'type' => 'send',
+//                 'message' => $note,
+//                 'contribution_type' => $contributionType,
+//             ]);
+
+//             // Log in coin_transactions (receive)
+//             CoinTransaction::create([
+//                 'sender_id' => $sender->id,
+//                 'receiver_id' => $receiverId,
+//                 'coin_package_id' => null,
+//                 'post_id' => $postId,
+//                 'event_id' => $eventId,
+//                 'coins' => $coins,
+//                 'type' => 'receive',
+//                 'message' => $note,
+//                 'contribution_type' => $contributionType,
+//             ]);
+// $contributionType = $contributionType ? $contributionType : ($type ?? 'donation');
+
+// // dd($contributionType);
+
+//             // ✅ Extra insert for event donations table
+//             if ($eventId && $contributionType === 'donation') {
+//                 EventDonation::create([
+//                     'event_id' => $eventId,
+//                     'user_id'  => $sender->id,
+//                     'amount'   => $coins,
+//                 ]);
+//             }
+//         });
+
+//         return $this->sendResponse('Coins sent successfully');
+//     } catch (\Exception $e) {
+//         return $this->sendError('Failed to send coins', ['error' => $e->getMessage()], 500);
+//     }
+// }
+
+public function send(Request $request)
 {
     try {
-         $type  = $request->get(key: "type");
+        $type  = $request->get("type");
         $data = $request->validate([
             'coins' => ['required', 'integer', 'min:1'],
             'message' => ['nullable', 'string', 'max:1000'],
@@ -83,17 +200,22 @@ class TransactionController extends Controller
             return $this->sendError('Cannot send coins to yourself', [], 422);
         }
 
-        DB::transaction(function () use ($sender, $receiverId, $coins, $note, $postId, $eventId, $contributionType) {
-            $senderWallet = Wallet::firstOrCreate(
-                ['user_id' => $sender->id],
-                ['balance' => 0]
+        // Sender wallet fetch & balance check before transaction
+        $senderWallet = Wallet::firstOrCreate(
+            ['user_id' => $sender->id],
+            ['balance' => 0]
+        );
+        $senderWallet->refresh()->lockForUpdate();
+
+        if ($senderWallet->balance < $coins) {
+            return $this->sendError(
+                'Insufficient balance. Please add funds to your wallet before proceeding.',
+                [],
+                422
             );
-            $senderWallet->refresh()->lockForUpdate();
+        }
 
-            if ($senderWallet->balance < $coins) {
-               return $this->sendError('Insufficient balance. Please add funds to your wallet before proceeding.',[], 422);
-            }
-
+        DB::transaction(function () use ($sender, $receiverId, $coins, $note, $postId, $eventId, $contributionType, $senderWallet, $type) {
             $receiverWallet = Wallet::firstOrCreate(
                 ['user_id' => $receiverId],
                 ['balance' => 0]
@@ -128,11 +250,10 @@ class TransactionController extends Controller
                 'message' => $note,
                 'contribution_type' => $contributionType,
             ]);
-$contributionType = $contributionType ? $contributionType : ($type ?? 'donation');
 
-// dd($contributionType);
+            $contributionType = $contributionType ? $contributionType : ($type ?? 'donation');
 
-            // ✅ Extra insert for event donations table
+            // Extra insert for event donations table
             if ($eventId && $contributionType === 'donation') {
                 EventDonation::create([
                     'event_id' => $eventId,
@@ -147,7 +268,6 @@ $contributionType = $contributionType ? $contributionType : ($type ?? 'donation'
         return $this->sendError('Failed to send coins', ['error' => $e->getMessage()], 500);
     }
 }
-
 
 
 
