@@ -802,13 +802,20 @@ public function update(Request $request, $id)
             ($event->mode === 'physical' && $event->physical_type === 'self_host')
         ) {
             $polls = $event->polls()->get();
+            // foreach ($polls as $poll) {
+            //     $poll->votes()->delete();
+            //     if (method_exists($poll, 'candidates')) {
+            //         $poll->candidates()->delete();
+            //     }
+            //     $poll->delete();
+            // }
             foreach ($polls as $poll) {
-                $poll->votes()->delete();
-                if (method_exists($poll, 'candidates')) {
-                    $poll->candidates()->delete();
-                }
-                $poll->delete();
-            }
+    if (method_exists($poll, 'candidates')) {
+        $poll->candidates()->delete(); // delete candidates first
+    }
+    $poll->votes()->delete();          // then delete votes
+    $poll->delete();                   // finally delete poll
+}
         }
 
         DB::commit();
