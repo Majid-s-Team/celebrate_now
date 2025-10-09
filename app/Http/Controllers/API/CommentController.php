@@ -53,7 +53,12 @@ class CommentController extends Controller
                 'user_id' => auth()->id(),
                 'receiver_id' => $post->user->id,
                 'title'   => 'Comment added Successful',
-                'message'     => "{$user->first_name} {$user->last_name} commented on your post",]);
+                'message'     => "{$user->first_name} {$user->last_name} commented on your post",
+                'data'        => [
+        'comment_id' => $comment->id,
+        'post_id'    => $post->id,
+    ],]);
+
             DB::commit();
         // return response()->json($comment);
         return $this->sendResponse('Comment posted successfully', $comment, 201);
@@ -87,7 +92,10 @@ class CommentController extends Controller
                 'user_id' => $user->id,
                 'receiver_id' => $comment->user->id,
                 'title'   => 'Comment liked Successful',
-                'message'     => "{$user->first_name} {$user->last_name} liked your comment. ",]);
+                'message'     => "{$user->first_name} {$user->last_name} liked your comment. ",
+                'data' => [
+                    'comment_id' => $comment->id,
+                ],]);
             DB::commit();
 
             // return response()->json(['message' => 'Liked']);
@@ -131,7 +139,11 @@ class CommentController extends Controller
                 'user_id' => auth()->id(),
                 'receiver_id' => $comment->user->id,
                 'title'   => 'Reply posted Successful',
-                'message'     => "{$user->first_name} {$user->last_name} replied to your comment",]);
+                'message'     => "{$user->first_name} {$user->last_name} replied to your comment",
+                'data' =>[
+                    'comment_id'=>$comment->id,
+                    'reply_id' => $reply->id
+                ],]);
             DB::commit();
         // return response()->json($reply);
         return $this->sendResponse('Reply posted successfully', $reply, 201);

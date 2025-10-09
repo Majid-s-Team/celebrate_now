@@ -188,6 +188,10 @@ class CoinController extends Controller
                 'user_id' => $user->id,
                 'title'   => 'Coin Purchase Successful',
                 'message' => 'You purchased ' . $data['coins'] . ' coins for ' . $data['amount'] . ' successfully.',
+                'data' => [
+                    'wallet_id' => $wallet->id,
+                    'transaction_id' => $transaction->id
+                ],
             ]);
 
             DB::commit();

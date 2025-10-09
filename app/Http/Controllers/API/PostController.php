@@ -57,6 +57,7 @@ class PostController extends Controller
 
     public function store(Request $request)
     {
+        $user=auth()->user();
         $validator = Validator::make($request->all(), [
             'caption' => 'nullable|string',
             'photos' => 'nullable|array',
@@ -119,8 +120,53 @@ class PostController extends Controller
                     'url' => $media['url'],
                     'type' => $media['type']
                 ]);
+
             }
         }
+
+        $userFollowers = Follow::where('following_id', auth()->id())->get();
+         $member = EventMember::where('event_id', $request->event_id)
+    ->where('status', 'joined')
+    ->whereNotIn('role', ['host'])
+    ->get();
+
+
+if ($userFollowers->isNotEmpty() && $request->event_id) {
+
+
+
+    foreach ($member as $members) {
+
+        // yahan follower_id nikalenge
+        $receiverId = $members->user_id;
+        Notification::create([
+            'user_id' => auth()->id(), // jisne comment kiya
+            'receiver_id' => $receiverId, // jisko notification milegi
+            'title' => 'Event Post added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just posted something new in the Event {$event->title}",
+        ]);
+    }
+
+    DB::commit();
+}
+
+
+if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
+
+    foreach ($userFollowers as $follower) {
+
+        // yahan follower_id nikalenge
+        $receiverId = $follower->follower_id;
+        Notification::create([
+            'user_id' => auth()->id(), // jisne comment kiya
+            'receiver_id' => $receiverId, // jisko notification milegi
+            'title' => 'Post added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just posted something new",
+        ]);
+    }
+
+    DB::commit();
+}
 
         return $this->sendResponse('Post created successfully', $post->load('media'), 201);
     }
