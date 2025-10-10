@@ -410,7 +410,7 @@ public function send(Request $request)
             $user = auth()->user();
 
             $type = $request->query('type', 'sent');
-            $postId = $request->query('post_id');
+            // $postId = $request->query('post_id');
 
             $query = CoinTransaction::with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'post:id,caption,user_id'])
                 ->whereNotNull('post_id');
@@ -421,9 +421,9 @@ public function send(Request $request)
                 $query->where('receiver_id', $user->id)->where('type', 'receive');
             }
 
-            if (!empty($postId)) {
-                $query->where('post_id', $postId);
-            }
+            // if (!empty($postId)) {
+            //     $query->where(column: 'post_id', $postId);
+            // }
 
             $transactions = $query->orderBy('id', 'desc')->get();
 

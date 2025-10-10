@@ -13,7 +13,7 @@ class PolicyController extends Controller
 {
     public function index(Request $request){
         $request->validate([
-        'type' => 'required|string|in:terms,privacy',
+        'type' => 'required|string|in:terms,privacy,faq',
     ]);
         $user = auth()->user();
 
@@ -23,6 +23,9 @@ class PolicyController extends Controller
     }
     if($request->type == 'terms'){
     return $this->sendResponse('Terms & Conditions fetched Successfully ', $policy);
+    }
+    if($request->type== 'faq'){
+        return $this->sendResponse('FAQs fetched Successfully',$policy);
     }
     else if($request->type == 'privacy'){
     return $this->sendResponse('Privacy Conditions fetched Successfully ', $policy);
