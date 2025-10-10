@@ -148,6 +148,9 @@ public function store(Request $request)
             'receiver_id' => $memberId, // jisko notification milegi
             'title' => 'Event added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just created an Event {$event->title}",
+            'data' => [
+                'event_id' => $event->id
+            ]
         ]);
         }
 
@@ -180,6 +183,10 @@ public function store(Request $request)
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Automated poll added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you’ve been included as one of the options.",
+            'data' => [
+                'event_id' => $event->id,
+                'poll_id' => $poll->id
+            ]
         ]);
         }
        }

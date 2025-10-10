@@ -144,6 +144,10 @@ if ($userFollowers->isNotEmpty() && $request->event_id) {
             'receiver_id' => $receiverId, // jisko notification milegi
             'title' => 'Event Post added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just posted something new in the Event {$event->title}",
+            'data' => [
+                'event_id'=>$event->id,
+                'post_id' => $post->id
+            ]
         ]);
     }
 
@@ -162,6 +166,9 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
             'receiver_id' => $receiverId, // jisko notification milegi
             'title' => 'Post added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just posted something new",
+            'data'=> [
+                'post_id'=>$post->id
+            ]
         ]);
     }
 
@@ -363,7 +370,11 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
                 'user_id' => $user->id,
                 'receiver_id' => $post->user->id,
                 'title'   => 'Post Liked Successful',
-                'message'     => "{$user->first_name} {$user->last_name} liked your post",]);
+                'message'     => "{$user->first_name} {$user->last_name} liked your post",
+                'data'=> [
+                    'post_id'=>$post->id
+                ]
+            ]);
             DB::commit();
 
             return $this->sendResponse('Post Liked');
@@ -395,7 +406,10 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
                 'user_id' => $user->id,
                 'receiver_id' => $userId,
                 'title'   => 'User Tagged Successful',
-                'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",]);
+                'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
+                'data'=>[
+                    'post_id'=>$post->id
+                ]]);
             DB::commit();
         }
 

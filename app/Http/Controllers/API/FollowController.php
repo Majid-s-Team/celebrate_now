@@ -59,8 +59,12 @@ class FollowController extends Controller
                Notification::create([
                 'user_id' => auth()->id(),
                 'receiver_id' =>$id,
-                'title'   => 'Comment added Successful',
-                'message'     => "{$user->first_name} {$user->last_name} started following you",]);
+                'title'   => 'Follow added Successful',
+                'message'     => "{$user->first_name} {$user->last_name} started following you",
+                'data' => [
+                    'follower_id'=>$user->id,
+                    'follower_name'=> "{$user->first_name} {$user->last_name}"
+                ]]);
             DB::commit();
             return $this->sendResponse('User followed successfully.');
         }

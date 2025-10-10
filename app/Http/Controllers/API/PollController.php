@@ -602,6 +602,9 @@ public function createPoll(Request $request)
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Manual poll added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just created a pole in the event {$event->title}",
+            'data'=>[
+                'poll_id'=>$poll->id
+            ]
         ]);
         }
 
@@ -1161,6 +1164,12 @@ public function deletePoll(Request $request, $pollId)
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Poll option added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just added an option {$option->option_text} in the event : {$eventPoll->event->title} .",
+            'data'=> [
+                'poll_id'=>$poll->id,
+                'poll_option'=>$option->option_text
+            ]
+
+
         ]);
 
     }
