@@ -448,7 +448,7 @@ public function send(Request $request)
                 ];
             });
 
-            return $this->sendResponse("Gifts {$type} successfully", $response);
+            return $this->sendResponse("Gifts {$type} ", $response);
 
         } catch (\Exception $e) {
             return $this->sendError('Failed to fetch gifts', ['error' => $e->getMessage()], 500);
