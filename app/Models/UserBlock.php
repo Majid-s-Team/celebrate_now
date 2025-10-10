@@ -24,8 +24,8 @@ class UserBlock extends Model
     /**
      * Jo user block hua hai (blocked)
      */
-    public function blocked()
-    {
-        return $this->belongsTo(User::class, 'blocked_id');
-    }
+ public function blocked()
+{
+    return $this->belongsTo(User::class, 'blocked_id')->withoutGlobalScopes();
+}
 }

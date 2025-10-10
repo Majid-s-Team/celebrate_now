@@ -192,6 +192,7 @@ class CoinController extends Controller
                     'wallet_id' => $wallet->id,
                     'transaction_id' => $transaction->id
                 ],
+                'type'=> 'coinPurchase'
             ]);
 
             DB::commit();
