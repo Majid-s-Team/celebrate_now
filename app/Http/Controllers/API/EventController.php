@@ -150,7 +150,8 @@ public function store(Request $request)
             'message' => "{$user->first_name} {$user->last_name} has just created an Event {$event->title}",
             'data' => [
                 'event_id' => $event->id
-            ]
+            ],
+            'type' => 'event'
         ]);
         }
 
@@ -186,7 +187,8 @@ public function store(Request $request)
             'data' => [
                 'event_id' => $event->id,
                 'poll_id' => $poll->id
-            ]
+            ],
+            'type' => 'autopoll'
         ]);
         }
        }

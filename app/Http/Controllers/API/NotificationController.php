@@ -15,7 +15,8 @@ class NotificationController extends Controller
     {
         $user = auth()->user();
 
-        $notifications = Notification::where('user_id', $user->id)
+        $notifications = Notification::with('sender')
+            ->where('user_id', $user->id)
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
@@ -110,6 +111,7 @@ class NotificationController extends Controller
             'receiver_id' =>['nullable', 'exists:users,id'],
             'title'   => ['required', 'string', 'max:255'],
             'message' => ['nullable', 'string'],
+            'type'=> ['required','in:coinPurchase']
 
         ]);
 
@@ -118,6 +120,7 @@ class NotificationController extends Controller
             'receiver_id' => $data['receiver_id'],
             'title'   => $data['title'],
             'message' => $data['message'] ?? null,
+            'type' => $data['type'],
             'is_read' => false,
         ]);
 

@@ -10,6 +10,7 @@ use App\Models\Post;
 use App\Models\Event;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Models\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
@@ -151,6 +152,7 @@ class TransactionController extends Controller
 public function send(Request $request)
 {
     try {
+        $user= auth()->user();
         $type  = $request->get("type");
         $data = $request->validate([
             'coins' => ['required', 'integer', 'min:1'],
@@ -261,7 +263,19 @@ public function send(Request $request)
                     'amount'   => $coins,
                 ]);
             }
+
         });
+          Notification::create([
+            'user_id' => auth()->id(),
+            'receiver_id' => $receiverId, // jisko notification milegi
+            'title' => 'Coins Added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just send you coins",
+            'data' => [
+                'event_id'=>$eventId,
+                'post_id' => $post->id
+            ],
+            'type'=>'sendCoins'
+        ]);
 
         return $this->sendResponse('Coins sent successfully');
     } catch (\Exception $e) {
@@ -410,7 +424,7 @@ public function send(Request $request)
             $user = auth()->user();
 
             $type = $request->query('type', 'sent');
-            // $postId = $request->query('post_id');
+            $postId = $request->query('post_id');
 
             $query = CoinTransaction::with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'post:id,caption,user_id'])
                 ->whereNotNull('post_id');
@@ -421,9 +435,9 @@ public function send(Request $request)
                 $query->where('receiver_id', $user->id)->where('type', 'receive');
             }
 
-            // if (!empty($postId)) {
-            //     $query->where(column: 'post_id', $postId);
-            // }
+            if (!empty($postId)) {
+                $query->where('post_id', $postId);
+            }
 
             $transactions = $query->orderBy('id', 'desc')->get();
 

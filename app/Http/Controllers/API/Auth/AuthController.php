@@ -264,8 +264,10 @@ class AuthController extends Controller
 
     public function viewBlockList(){
         $user = auth()->user();
-        $userBlocks = UserBlock::where('blocker_id',$user->id)->get();
-        return $this->sendResponse('User Blocked List', [$userBlocks], 200);
+        $userBlocks = UserBlock::with('blocked:id,first_name,last_name,profile_image')
+        ->where('blocker_id',$user->id)->get();
+
+        return $this->sendResponse('User Blocked List', $userBlocks, 200);
     }
     public function softDeleteUser(Request $request, $userId)
     {

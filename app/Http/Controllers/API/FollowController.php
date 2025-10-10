@@ -64,7 +64,9 @@ class FollowController extends Controller
                 'data' => [
                     'follower_id'=>$user->id,
                     'follower_name'=> "{$user->first_name} {$user->last_name}"
-                ]]);
+                ],
+                'type'=>'follow'
+                ]);
             DB::commit();
             return $this->sendResponse('User followed successfully.');
         }

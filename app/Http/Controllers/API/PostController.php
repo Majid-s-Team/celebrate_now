@@ -147,7 +147,8 @@ if ($userFollowers->isNotEmpty() && $request->event_id) {
             'data' => [
                 'event_id'=>$event->id,
                 'post_id' => $post->id
-            ]
+            ],
+            'type'=>'eventPost'
         ]);
     }
 
@@ -168,7 +169,8 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
             'message' => "{$user->first_name} {$user->last_name} has just posted something new",
             'data'=> [
                 'post_id'=>$post->id
-            ]
+            ],
+            'type'=>'post'
         ]);
     }
 
@@ -373,7 +375,8 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
                 'message'     => "{$user->first_name} {$user->last_name} liked your post",
                 'data'=> [
                     'post_id'=>$post->id
-                ]
+                ],
+                'type'=>'postLike'
             ]);
             DB::commit();
 
@@ -409,7 +412,9 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
                 'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
                 'data'=>[
                     'post_id'=>$post->id
-                ]]);
+                ],
+                'type'=> 'userTag'
+            ]);
             DB::commit();
         }
 

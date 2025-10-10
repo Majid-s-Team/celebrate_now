@@ -604,7 +604,8 @@ public function createPoll(Request $request)
             'message' => "{$user->first_name} {$user->last_name} has just created a pole in the event {$event->title}",
             'data'=>[
                 'poll_id'=>$poll->id
-            ]
+            ],
+            'type'=>'poll'
         ]);
         }
 
@@ -1167,7 +1168,8 @@ public function deletePoll(Request $request, $pollId)
             'data'=> [
                 'poll_id'=>$poll->id,
                 'poll_option'=>$option->option_text
-            ]
+            ],
+            'type'=>'pollOption'
 
 
         ]);
