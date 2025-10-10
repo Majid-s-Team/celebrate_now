@@ -107,12 +107,15 @@ class NotificationController extends Controller
     {
         $data = $request->validate([
             'user_id' => ['required', 'exists:users,id'],
+            'receiver_id' =>['nullable', 'exists:users,id'],
             'title'   => ['required', 'string', 'max:255'],
             'message' => ['nullable', 'string'],
+
         ]);
 
         $notification = Notification::create([
             'user_id' => $data['user_id'],
+            'receiver_id' => $data['receiver_id'],
             'title'   => $data['title'],
             'message' => $data['message'] ?? null,
             'is_read' => false,

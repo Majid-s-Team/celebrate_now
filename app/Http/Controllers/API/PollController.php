@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Models\Poll;
 use App\Models\Event;
+use App\Models\Notification;
 use App\Models\User;
 use App\Models\PollCandidate;
 use App\Models\PollVote;
@@ -591,6 +592,23 @@ public function createPoll(Request $request)
         'status' => 'active',
     ]);
 
+     $onlymembers = EventMember::where('event_id',$event->id)
+            ->where('status', 'joined')
+        ->whereNotIn('role', ['host','cohost'])->get();
+        foreach($onlymembers as $om)
+        {
+            Notification::create([
+            'user_id' => auth()->id(), // jisne event create kiya
+            'receiver_id' => $om->user_id, // jisko notification milegi
+            'title' => 'Manual poll added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just created a pole in the event {$event->title}",
+            'data'=>[
+                'poll_id'=>$poll->id
+            ]
+        ]);
+        }
+
+
     // Add poll options
     foreach ($data['options'] as $option) {
         $exists = PollOption::where('poll_id', $poll->id)
@@ -1101,6 +1119,9 @@ public function deletePoll(Request $request, $pollId)
         $user = $request->user();
 
         $poll = Poll::findOrFail($pollId);
+        $eventPoll= Poll::with('event')
+        ->find($pollId);
+
 
         if (!$poll->allow_member_add_option) {
             return $this->sendError('Members are not allowed to add options');
@@ -1134,6 +1155,24 @@ public function deletePoll(Request $request, $pollId)
             'user_id' => $user->id,
             'poll_option_id' => $option->id,
         ]);
+
+    $onlymembers = EventMember::where('event_id',$eventPoll->event_id)
+            ->where('status', 'joined')->get();
+    foreach($onlymembers as $om){
+         Notification::create([
+            'user_id' => auth()->id(), // jisne poll edit kiya
+            'receiver_id' => $om->user_id, // jisko notification milegi
+            'title' => 'Poll option added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just added an option {$option->option_text} in the event : {$eventPoll->event->title} .",
+            'data'=> [
+                'poll_id'=>$poll->id,
+                'poll_option'=>$option->option_text
+            ]
+
+
+        ]);
+
+    }
 
         return $this->sendResponse('Option added successfully', $option);
     }

@@ -12,8 +12,11 @@ use App\Models\Comment;
 use App\Models\CommentLike;
 use App\Models\Reply;
 use App\Models\Follow;
+use App\Models\Notification;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
 
 class FollowController extends Controller
 {
@@ -32,7 +35,7 @@ class FollowController extends Controller
     {
         // Check if the user exists
         // If not, return an error response
-
+        $user=auth()->user();
         if (!User::find($id)) {
             return $this->sendError('User not found', [], 404);
         }
@@ -52,6 +55,17 @@ class FollowController extends Controller
                 'follower_id' => auth()->id(),
                 'following_id' => $id
             ]);
+
+               Notification::create([
+                'user_id' => auth()->id(),
+                'receiver_id' =>$id,
+                'title'   => 'Follow added Successful',
+                'message'     => "{$user->first_name} {$user->last_name} started following you",
+                'data' => [
+                    'follower_id'=>$user->id,
+                    'follower_name'=> "{$user->first_name} {$user->last_name}"
+                ]]);
+            DB::commit();
             return $this->sendResponse('User followed successfully.');
         }
     }

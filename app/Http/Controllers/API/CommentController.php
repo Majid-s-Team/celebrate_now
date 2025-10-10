@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 
 use App\Models\Post;
 use App\Models\PostLike;
+use App\Models\Notification;
 use App\Models\PostTag;
 use App\Models\Comment;
 use App\Models\CommentLike;
@@ -15,6 +16,9 @@ use App\Models\Reply;
 use App\Models\Follow;
 use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+
+
 
 class CommentController extends Controller
 {
@@ -22,7 +26,8 @@ class CommentController extends Controller
     public function store(Request $request, $postId)
     {
         // $request->validate(['body' => 'required|string', 'emojis' => 'nullable|array']);
-
+        $user=auth()->user();
+        $post = Post::with('user')->find($postId);
         //manual validation due to sendError custom method for error responses
         $validator = \Validator::make($request->all(), [
             'body' => 'required|string',
@@ -43,6 +48,18 @@ class CommentController extends Controller
             'body' => $request->body,
             'emojis' => $request->emojis
         ]);
+
+           Notification::create([
+                'user_id' => auth()->id(),
+                'receiver_id' => $post->user->id,
+                'title'   => 'Comment added Successful',
+                'message'     => "{$user->first_name} {$user->last_name} commented on your post",
+                'data'        => [
+        'comment_id' => $comment->id,
+        'post_id'    => $post->id,
+    ],]);
+
+            DB::commit();
         // return response()->json($comment);
         return $this->sendResponse('Comment posted successfully', $comment, 201);
 
@@ -57,6 +74,8 @@ class CommentController extends Controller
     {
         // Check if the comment exists
         // If not, return an error response
+        $user=auth()->user();
+        $comment=Comment::with('user')->find($id);
         if (!Comment::where('id', $id)->exists()) {
             return $this->sendError('Comment not found', [], 404);
         }
@@ -69,6 +88,16 @@ class CommentController extends Controller
 
         } else {
             CommentLike::create(['comment_id' => $id, 'user_id' => auth()->id()]);
+            Notification::create([
+                'user_id' => $user->id,
+                'receiver_id' => $comment->user->id,
+                'title'   => 'Comment liked Successful',
+                'message'     => "{$user->first_name} {$user->last_name} liked your comment. ",
+                'data' => [
+                    'comment_id' => $comment->id,
+                ],]);
+            DB::commit();
+
             // return response()->json(['message' => 'Liked']);
             return $this->sendResponse('Comment liked');
 
@@ -77,9 +106,9 @@ class CommentController extends Controller
 
     public function reply(Request $request, $id)
     {
-
+        $user=auth()->user();
         // $request->validate(['body' => 'required|string', 'emojis' => 'nullable|array']);
-
+        $comment=Comment::with('user')->find($id);
 
         // Check if the comment exists
         // If not, return an error response
@@ -104,6 +133,18 @@ class CommentController extends Controller
             'body' => $request->body,
             'emojis' => $request->emojis
         ]);
+
+
+           Notification::create([
+                'user_id' => auth()->id(),
+                'receiver_id' => $comment->user->id,
+                'title'   => 'Reply posted Successful',
+                'message'     => "{$user->first_name} {$user->last_name} replied to your comment",
+                'data' =>[
+                    'comment_id'=>$comment->id,
+                    'reply_id' => $reply->id
+                ],]);
+            DB::commit();
         // return response()->json($reply);
         return $this->sendResponse('Reply posted successfully', $reply, 201);
 

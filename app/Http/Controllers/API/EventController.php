@@ -9,6 +9,7 @@ use App\Models\Event;
 use App\Models\EventMember;
 use App\Models\Poll;
 use App\Models\Post;
+use App\Models\Notification;
 use App\Models\PollCandidate;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
@@ -141,6 +142,16 @@ public function store(Request $request)
                 'role' => 'member',
                 'status' => 'joined',
             ]);
+
+            Notification::create([
+            'user_id' => auth()->id(), // jisne event create kiya
+            'receiver_id' => $memberId, // jisko notification milegi
+            'title' => 'Event added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just created an Event {$event->title}",
+            'data' => [
+                'event_id' => $event->id
+            ]
+        ]);
         }
 
         if ($event->mode == 'physical' && $event->physical_type == 'group_vote') {
@@ -161,7 +172,24 @@ public function store(Request $request)
                     'candidate_id' => $m->user_id,
                 ]);
             }
+            $onlymembers = EventMember::where('event_id',$event->id)
+            ->where('status', 'joined')
+        ->whereNotIn('role', ['host'])->get();
+
+        foreach($onlymembers as $om)
+        {
+            Notification::create([
+            'user_id' => auth()->id(), // jisne event create kiya
+            'receiver_id' => $om->user_id, // jisko notification milegi
+            'title' => 'Automated poll added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you’ve been included as one of the options.",
+            'data' => [
+                'event_id' => $event->id,
+                'poll_id' => $poll->id
+            ]
+        ]);
         }
+       }
 
         DB::commit();
         return $this->sendResponse("Event created successfully", $event->load('members', 'category', 'creator'), 201);

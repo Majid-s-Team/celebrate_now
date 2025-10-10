@@ -11,6 +11,7 @@ use App\Models\PostTag;
 use App\Models\Event;
 use App\Models\Comment;
 use App\Models\EventMember;
+use App\Models\Notification;
 use App\Models\CommentLike;
 use App\Models\Reply;
 use App\Models\Follow;
@@ -19,6 +20,8 @@ use App\Models\EventCategory;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+
 
 class PostController extends Controller
 {
@@ -54,6 +57,7 @@ class PostController extends Controller
 
     public function store(Request $request)
     {
+        $user=auth()->user();
         $validator = Validator::make($request->all(), [
             'caption' => 'nullable|string',
             'photos' => 'nullable|array',
@@ -116,8 +120,60 @@ class PostController extends Controller
                     'url' => $media['url'],
                     'type' => $media['type']
                 ]);
+
             }
         }
+
+        $userFollowers = Follow::where('following_id', auth()->id())->get();
+         $member = EventMember::where('event_id', $request->event_id)
+    ->where('status', 'joined')
+    ->whereNotIn('role', ['host'])
+    ->get();
+
+
+if ($userFollowers->isNotEmpty() && $request->event_id) {
+
+
+
+    foreach ($member as $members) {
+
+        // yahan follower_id nikalenge
+        $receiverId = $members->user_id;
+        Notification::create([
+            'user_id' => auth()->id(), // jisne comment kiya
+            'receiver_id' => $receiverId, // jisko notification milegi
+            'title' => 'Event Post added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just posted something new in the Event {$event->title}",
+            'data' => [
+                'event_id'=>$event->id,
+                'post_id' => $post->id
+            ]
+        ]);
+    }
+
+    DB::commit();
+}
+
+
+if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
+
+    foreach ($userFollowers as $follower) {
+
+        // yahan follower_id nikalenge
+        $receiverId = $follower->follower_id;
+        Notification::create([
+            'user_id' => auth()->id(), // jisne comment kiya
+            'receiver_id' => $receiverId, // jisko notification milegi
+            'title' => 'Post added Successfully',
+            'message' => "{$user->first_name} {$user->last_name} has just posted something new",
+            'data'=> [
+                'post_id'=>$post->id
+            ]
+        ]);
+    }
+
+    DB::commit();
+}
 
         return $this->sendResponse('Post created successfully', $post->load('media'), 201);
     }
@@ -294,6 +350,7 @@ class PostController extends Controller
 
     public function like($id)
     {
+        $user=auth()->user();
 
         $like = PostLike::where('user_id', auth()->id())->where('post_id', $id)->first();
 
@@ -309,6 +366,17 @@ class PostController extends Controller
         } else {
             PostLike::create(['user_id' => auth()->id(), 'post_id' => $id]);
 
+              Notification::create([
+                'user_id' => $user->id,
+                'receiver_id' => $post->user->id,
+                'title'   => 'Post Liked Successful',
+                'message'     => "{$user->first_name} {$user->last_name} liked your post",
+                'data'=> [
+                    'post_id'=>$post->id
+                ]
+            ]);
+            DB::commit();
+
             return $this->sendResponse('Post Liked');
 
         }
@@ -317,6 +385,7 @@ class PostController extends Controller
 
     public function tagUsers(Request $request, $id)
     {
+        $user=auth()->user();
         $post = Post::find($id);
         if (!$post) {
             return $this->sendError('No Record Found', 'Post id : ' . $id . ' not found', 404);
@@ -333,7 +402,19 @@ class PostController extends Controller
 
         foreach ($request->user_ids as $userId) {
             PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
+            Notification::create([
+                'user_id' => $user->id,
+                'receiver_id' => $userId,
+                'title'   => 'User Tagged Successful',
+                'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
+                'data'=>[
+                    'post_id'=>$post->id
+                ]]);
+            DB::commit();
         }
+
+
+
 
         return $this->sendResponse('Users tagged successfully');
     }
