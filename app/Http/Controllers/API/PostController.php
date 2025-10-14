@@ -544,7 +544,6 @@ if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
                 $q->where('privacy', 'public')
                     ->orWhere('privacy', 'private');
             });
-
         if ($categoryId) {
             $postsQuery->where('event_category_id', $categoryId);
         }

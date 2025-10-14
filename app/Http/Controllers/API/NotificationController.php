@@ -14,11 +14,13 @@ class NotificationController extends Controller
     public function index()
     {
         $user = auth()->user();
+        $perPage = request()->query('per_page', 10);
+        $page = request()->query('page', 1);
 
         $notifications = Notification::with('sender')
-            ->where('user_id', $user->id)
+            ->where('receiver_id', $user->id)
             ->orderBy('created_at', 'desc')
-            ->paginate(10);
+            ->paginate($perPage, ['*'], 'page', $page);
 
         return $this->sendResponse('Notifications fetched successfully', $notifications);
     }
