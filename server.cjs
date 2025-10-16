@@ -11,8 +11,8 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-const LARAVEL_API_URL = "http://127.0.0.1:8000";
-// const LARAVEL_API_URL ="https://modmarket.retrocubedev.com";
+// const LARAVEL_API_URL = "http://127.0.0.1:8000";
+const LARAVEL_API_URL ="https://celebratenow.retrocubedev.com";
 let onlineUsers = new Map();
 
 io.on("connection", (socket) => {
