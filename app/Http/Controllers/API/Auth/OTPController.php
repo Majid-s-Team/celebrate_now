@@ -8,7 +8,8 @@ use App\Models\User;
 use App\Models\UserOtp;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
-
+use Illuminate\Support\Facades\Mail;
+use App\Mail\SendOtpMail;
 class OTPController extends Controller
 {
     public function getOtp(Request $request)
@@ -23,13 +24,16 @@ class OTPController extends Controller
             }
 
             $otp = rand(100000, 999999);
-
+            
             UserOtp::updateOrCreate(
                 ['user_id' => $user->id],
                 ['otp' => $otp, 'expires_at' => now()->addMinutes(10)]
             );
+            
+            Mail::to($user->email)->send(new SendOtpMail($user, $otp));
+            // return $this->sendResponse('OTP sent (dev)', ['otp' => $otp], 200);
+            return $this->sendResponse('OTP sent successfully to email.', [], 200);
 
-            return $this->sendResponse('OTP sent (dev)', ['otp' => $otp], 200);
 
         } catch (\Exception $e) {
             return $this->sendResponse('Server Error', ['error' => $e->getMessage()], 500);
