@@ -12,6 +12,11 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+use App\Http\Controllers\WEB\PolicyWebController;
+
+Route::get('/policies/{type}', [PolicyWebController::class, 'show'])
+    ->where('type', 'terms|privacy|faq')
+    ->name('policies.show');
 
 Route::get('/', function () {
     return view('welcome');
