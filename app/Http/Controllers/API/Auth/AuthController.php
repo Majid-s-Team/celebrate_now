@@ -108,6 +108,68 @@ class AuthController extends Controller
         ]);
     }
 
+   public function socialLogin(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'platform_id'   => 'required|string|max:255',
+        'platform_type' => 'required|in:facebook,google,apple',
+        'device_type'   => 'required|in:android,ios,web',
+        'device_token'  => 'nullable|string',
+        'first_name'    => 'required|string',
+        'last_name'    => 'required|string',
+        'contact_no'   => 'nullable|string',
+        'email'         => 'nullable|email',
+        'profile_image'     => 'nullable|url'
+    ]);
+
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    }
+
+    $params = $validator->validated();
+
+    // Try finding existing user
+    $user = User::where('platform_type', $params['platform_type'])
+        ->where('platform_id', $params['platform_id'])
+        ->whereNull('deleted_at')
+        ->first();
+
+        // dd(vars: $user);
+
+    // Apple case: no email provided
+    if (empty($user) && empty($params['email'])&& $params['device_type']=='ios') {
+        return $this->sendError(
+            'The current information is incomplete. Please go to Settings > Apple ID > Password & Security > Sign in with Apple, remove the app, and sign in again.',
+            [],
+            400
+        );
+    }
+
+    // Create or update user
+    $userData = User::socialUser($params);
+    $user = User::find($userData->id);
+
+    // Check if user is inactive
+    if (!$user->is_active) {
+        return $this->sendError('Account is deactivated. Please contact support.', [], 403);
+    }
+
+    // Generate new API token
+    $user->tokens()->delete(); // optional: remove old tokens
+    $token = $user->createToken('API Token')->plainTextToken;
+
+    // Update device_token if provided
+    if (!empty($params['device_token'])) {
+        $user->update(['device_token' => $params['device_token']]);
+    }
+
+    return $this->sendResponse('Social login successful', [
+        'token' => $token,
+        'user'  => $user,
+    ]);
+}
+
+
 
 
 

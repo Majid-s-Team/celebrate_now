@@ -131,7 +131,7 @@ class PostController extends Controller
     ->get();
 
 
-if ($userFollowers->isNotEmpty() && $request->event_id) {
+if ($request->event_id) {
 
 
 
@@ -156,7 +156,7 @@ if ($userFollowers->isNotEmpty() && $request->event_id) {
 }
 
 
-if ($userFollowers->isNotEmpty() && empty($request->event_id)) {
+if (empty($request->event_id)) {
 
     foreach ($userFollowers as $follower) {
 
