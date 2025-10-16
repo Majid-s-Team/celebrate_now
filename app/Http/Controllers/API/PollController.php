@@ -603,7 +603,8 @@ public function createPoll(Request $request)
             'title' => 'Manual poll added Successfully',
             'message' => "{$user->first_name} {$user->last_name} has just created a pole in the event {$event->title}",
             'data'=>[
-                'poll_id'=>$poll->id
+                'poll_id'=>$poll->id,
+                'event_id'=>$poll->event_id
             ],
             'type'=>'poll'
         ]);
@@ -1167,7 +1168,8 @@ public function deletePoll(Request $request, $pollId)
             'message' => "{$user->first_name} {$user->last_name} has just added an option {$option->option_text} in the event : {$eventPoll->event->title} .",
             'data'=> [
                 'poll_id'=>$poll->id,
-                'poll_option'=>$option->option_text
+                'poll_option'=>$option->option_text,
+                'event_id' =>$poll->event_id
             ],
             'type'=>'pollOption'
 

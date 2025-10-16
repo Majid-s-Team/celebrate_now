@@ -28,11 +28,17 @@ use App\Http\Controllers\API\WalletController;
 use App\Http\Controllers\API\TransactionController;
 use App\Http\Controllers\API\CardController;
 use App\Http\Controllers\API\NotificationController;
+use App\Http\Controllers\API\MessageController;
+
+
 
 
 Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
+        Route::post('/socialLogin', [AuthController::class, 'socialLogin']);
+
+
     // Route::post('/verify-otp', action: [AuthController::class, 'verifyOtp']);
 
     Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
@@ -48,6 +54,8 @@ Route::prefix('auth')->group(function () {
     Route::post('/reset-password', [OTPController::class, 'resetPassword']);
     Route::post('verify-otp-account', [OTPController::class, 'verifyOtpToActivateAccount']);
     Route::get('/policies',[PolicyController::class,'index']);
+
+
 
 
     Route::middleware('auth:sanctum')->group(function () {
@@ -163,6 +171,15 @@ Route::prefix('auth')->group(function () {
     });
 
 
+});
+
+Route::prefix('socket/messages')->group(function () {
+    Route::post('/', [MessageController::class, 'socketStore']);
+    Route::get('/history/{user1}/{user2}', [MessageController::class, 'chatHistory']);
+    Route::get('/unseen/{user_id}', [MessageController::class, 'unseenMessages']);
+    Route::post('/seen', [MessageController::class, 'markSeen']);
+    Route::get('inbox/{user_id}', [MessageController::class, 'inbox']);
+    Route::post('/upload', [MessageController::class, 'uploadMedia']);
 });
 
 

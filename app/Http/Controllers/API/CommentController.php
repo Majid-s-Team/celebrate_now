@@ -97,6 +97,7 @@ class CommentController extends Controller
                 'message'     => "{$user->first_name} {$user->last_name} liked your comment. ",
                 'data' => [
                     'comment_id' => $comment->id,
+                    'post_id' => $comment->post_id
                 ],
             'type'=>'commentLike']);
             DB::commit();
@@ -145,8 +146,8 @@ class CommentController extends Controller
                 'message'     => "{$user->first_name} {$user->last_name} replied to your comment",
                 'data' =>[
                     'comment_id'=>$comment->id,
-                    'reply_id' => $reply->id
-                ],
+                    'reply_id' => $reply->id,
+                    'post_id' => $comment->post_id                ],
                 'type'=>'commentReply'
             ]);
             DB::commit();
