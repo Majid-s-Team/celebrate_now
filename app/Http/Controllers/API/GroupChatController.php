@@ -16,154 +16,149 @@ class GroupChatController extends Controller
      * Create a new group (with optional members)
      */
     public function create(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        'created_by' => 'required|exists:users,id',
-        'members' => 'nullable|array',
-        'members.*.id' => 'required|integer|exists:users,id',
-        'members.*.can_see_past_messages' => 'nullable|boolean',
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'created_by' => 'required|exists:users,id',
+            'members' => 'nullable|array',
+            'members.*.id' => 'required|integer|exists:users,id',
+            'members.*.can_see_past_messages' => 'nullable|boolean',
+        ]);
 
-    if ($validator->fails()) {
-        return $this->apiResponse('Validation failed', $validator->errors(), 422);
-    }
-
-    // Create group
-    $group = Group::create([
-        'name' => $request->name,
-        'created_by' => $request->created_by,
-    ]);
-
-    // Add creator as member (always true)
-    GroupMember::firstOrCreate([
-        'group_id' => $group->id,
-        'user_id' => $request->created_by,
-    ], ['can_see_past_messages' => true]);
-
-    // Add provided members with optional per-member settings
-    if ($request->has('members')) {
-        foreach ($request->members as $member) {
-            if ($member['id'] == $request->created_by) continue;
-
-            GroupMember::firstOrCreate(
-                [
-                    'group_id' => $group->id,
-                    'user_id' => $member['id']
-                ],
-                [
-                    'can_see_past_messages' => $member['can_see_past_messages'] ?? true
-                ]
-            );
+        if ($validator->fails()) {
+            return $this->apiResponse('Validation failed', $validator->errors(), 422);
         }
+
+        $group = Group::create([
+            'name' => $request->name,
+            'created_by' => $request->created_by,
+        ]);
+
+        GroupMember::firstOrCreate([
+            'group_id' => $group->id,
+            'user_id' => $request->created_by,
+        ], ['can_see_past_messages' => true]);
+
+        if ($request->has('members')) {
+            foreach ($request->members as $member) {
+                if ($member['id'] == $request->created_by) continue;
+
+                GroupMember::firstOrCreate(
+                    [
+                        'group_id' => $group->id,
+                        'user_id' => $member['id']
+                    ],
+                    [
+                        'can_see_past_messages' => $member['can_see_past_messages'] ?? true
+                    ]
+                );
+            }
+        }
+
+        $members = GroupMember::where('group_id', $group->id)
+            ->with('user:id,first_name,last_name,profile_image')
+            ->get();
+
+        return $this->apiResponse('Group created successfully', [
+            'group' => $group,
+            'members' => $members
+        ]);
     }
-
-    // Fetch members with user details
-    $members = GroupMember::where('group_id', $group->id)
-        ->with('user:id,first_name,last_name,profile_image')
-        ->get();
-
-    return $this->apiResponse('Group created successfully', [
-        'group' => $group,
-        'members' => $members
-    ]);
-}
 
     /**
      * Add multiple members to an existing group
      */
-   public function addMember(Request $request, $groupId)
-{
-    $validator = Validator::make($request->all(), [
-        'added_by' => 'required|exists:users,id',
-        'members' => 'required|array|min:1',
-        'members.*.id' => 'required|exists:users,id',
-        'members.*.can_see_past_messages' => 'nullable|boolean',
-    ]);
+    public function addMember(Request $request, $groupId)
+    {
+        $validator = Validator::make($request->all(), [
+            'added_by' => 'required|exists:users,id',
+            'members' => 'required|array|min:1',
+            'members.*.id' => 'required|exists:users,id',
+            'members.*.can_see_past_messages' => 'nullable|boolean',
+        ]);
 
-    if ($validator->fails()) {
-        return $this->apiResponse('Validation failed', $validator->errors(), 422);
+        if ($validator->fails()) {
+            return $this->apiResponse('Validation failed', $validator->errors(), 422);
+        }
+
+        $group = Group::findOrFail($groupId);
+        $addedByUser = User::find($request->added_by);
+
+        if ($group->created_by != $request->added_by) {
+            return $this->apiResponse('Only the group creator can add members', null, 403);
+        }
+
+        $addedMembers = [];
+
+        foreach ($request->members as $memberData) {
+            $member = GroupMember::firstOrCreate(
+                [
+                    'group_id' => $groupId,
+                    'user_id' => $memberData['id']
+                ],
+                [
+                    'can_see_past_messages' => $memberData['can_see_past_messages'] ?? true
+                ]
+            );
+
+            $addedMembers[] = $member->user->first_name . ' ' . $member->user->last_name;
+        }
+
+        // Create a system message in group_messages
+        $messageText = $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
+        GroupMessage::create([
+            'group_id' => $groupId,
+            'sender_id' => $request->added_by,
+            'message' => $messageText,
+            'message_type' => 'system'
+        ]);
+
+        return $this->apiResponse('Members added successfully', [
+            'added_by' => $addedByUser,
+            'added_members' => $addedMembers
+        ]);
     }
 
-    $group = Group::findOrFail($groupId);
-    $addedByUser = User::find($request->added_by);
+    public function removeMember(Request $request, $groupId)
+    {
+        $validator = Validator::make($request->all(), [
+            'removed_by' => 'required|exists:users,id',
+            'user_id' => 'required|exists:users,id',
+        ]);
 
-    // Only group creator or admins can add members
-    if ($group->created_by != $request->added_by) {
-        return $this->apiResponse('Only the group creator can add members', null, 403);
+        if ($validator->fails()) {
+            return $this->apiResponse('Validation failed', $validator->errors(), 422);
+        }
+
+        $group = Group::findOrFail($groupId);
+        $removedByUser = User::find($request->removed_by);
+        $removedUser = User::find($request->user_id);
+
+        if ($group->created_by != $request->removed_by) {
+            return $this->apiResponse('Only the group creator can remove members', null, 403);
+        }
+
+        if ($request->user_id == $group->created_by) {
+            return $this->apiResponse('Group creator cannot be removed', null, 403);
+        }
+
+        GroupMember::where('group_id', $groupId)
+            ->where('user_id', $request->user_id)
+            ->delete();
+
+        // System message for removal
+        GroupMessage::create([
+            'group_id' => $groupId,
+            'sender_id' => $request->removed_by,
+            'message' => "{$removedUser->first_name} was removed by {$removedByUser->first_name}.",
+            'message_type' => 'system'
+        ]);
+
+        return $this->apiResponse('Member removed successfully', [
+            'removed_by' => $removedByUser->first_name,
+            'removed_user' => $removedUser->first_name
+        ]);
     }
-
-    $addedMembers = [];
-
-    foreach ($request->members as $memberData) {
-        $member = GroupMember::firstOrCreate(
-            [
-                'group_id' => $groupId,
-                'user_id' => $memberData['id']
-            ],
-            [
-                'can_see_past_messages' => $memberData['can_see_past_messages'] ?? true
-            ]
-        );
-
-        $addedMembers[] = $member->user->first_name . ' ' . $member->user->last_name;
-    }
-
-    // Create a system message in group_messages
-    $messageText = $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
-    GroupMessage::create([
-        'group_id' => $groupId,
-        'sender_id' => $request->added_by,
-        'message' => $messageText,
-        'message_type' => 'system'
-    ]);
-
-    return $this->apiResponse('Members added successfully', [
-        'added_by' => $addedByUser,
-        'added_members' => $addedMembers
-    ]);
-}
-
-  public function removeMember(Request $request, $groupId)
-{
-    $validator = Validator::make($request->all(), [
-        'removed_by' => 'required|exists:users,id',
-        'user_id' => 'required|exists:users,id',
-    ]);
-
-    if ($validator->fails()) {
-        return $this->apiResponse('Validation failed', $validator->errors(), 422);
-    }
-
-    $group = Group::findOrFail($groupId);
-    $removedByUser = User::find($request->removed_by);
-    $removedUser = User::find($request->user_id);
-
-    if ($group->created_by != $request->removed_by) {
-        return $this->apiResponse('Only the group creator can remove members', null, 403);
-    }
-
-    if ($request->user_id == $group->created_by) {
-        return $this->apiResponse('Group creator cannot be removed', null, 403);
-    }
-
-    GroupMember::where('group_id', $groupId)
-        ->where('user_id', $request->user_id)
-        ->delete();
-
-    // System message for removal
-    GroupMessage::create([
-        'group_id' => $groupId,
-        'sender_id' => $request->removed_by,
-        'message' => "{$removedUser->first_name} was removed by {$removedByUser->first_name}.",
-        'message_type' => 'system'
-    ]);
-
-    return $this->apiResponse('Member removed successfully', [
-        'removed_by' => $removedByUser->first_name,
-        'removed_user' => $removedUser->first_name
-    ]);
-}
 
     /**
      * Send message (only if user is a group member)
@@ -231,8 +226,8 @@ class GroupChatController extends Controller
     public function userGroups($userId)
     {
         $groups = Group::whereHas('members', function ($q) use ($userId) {
-                $q->where('user_id', $userId);
-            })
+            $q->where('user_id', $userId);
+        })
             ->with([
                 'members.user:id,first_name,last_name,profile_image',
                 'lastMessage.sender:id,first_name,last_name,profile_image'
@@ -255,6 +250,4 @@ class GroupChatController extends Controller
 
         return $this->apiResponse('User groups fetched', $groups);
     }
-
-
 }
