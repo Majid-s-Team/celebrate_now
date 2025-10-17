@@ -29,7 +29,7 @@ use App\Http\Controllers\API\TransactionController;
 use App\Http\Controllers\API\CardController;
 use App\Http\Controllers\API\NotificationController;
 use App\Http\Controllers\API\MessageController;
-
+use App\Http\Controllers\API\GroupChatController;
 
 
 
@@ -181,5 +181,15 @@ Route::prefix('socket/messages')->group(function () {
     Route::get('inbox/{user_id}', [MessageController::class, 'inbox']);
     Route::post('/upload', [MessageController::class, 'uploadMedia']);
 });
+
+
+Route::post('/groups/create', [GroupChatController::class, 'create']);
+Route::post('/groups/{groupId}/add-member', [GroupChatController::class, 'addMember']);
+Route::post('groups/{groupId}/remove-member', [GroupChatController::class, 'removeMember']);
+Route::post('/groups/message', [GroupChatController::class, 'sendMessage']);
+Route::get('/groups/history/{groupId}/{userId}', [GroupChatController::class, 'history']);
+Route::get('/groups/{groupId}/members', [GroupChatController::class, 'getMembers']);
+Route::get('/groups/user/{userId}', [GroupChatController::class, 'userGroups']);
+
 
 
