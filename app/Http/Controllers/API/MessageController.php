@@ -105,6 +105,10 @@ class MessageController extends Controller
                 })
                 ->latest()
                 ->first();
+     $unreadCount = Message::where('sender_id', $user_id)
+    ->where('receiver_id', $chat->chat_with_id)
+    ->where('status', '!=', 'read')
+    ->count();
 
                 return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
@@ -112,6 +116,7 @@ class MessageController extends Controller
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'time' => $lastMsg->created_at->format('H:i'),
                     'date' => $lastMsg->created_at->format('Y-m-d'),
+                      'unreadCount'  => $unreadCount, // Added
                 ];
             });
 
