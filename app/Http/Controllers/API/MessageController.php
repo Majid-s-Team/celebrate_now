@@ -168,14 +168,18 @@ public function chatMedia($user2)
     }
 
     $mediaMessages = Message::where(function ($q) use ($user1, $user2) {
-            $q->where('sender_id', $user1)->where('receiver_id', $user2);
+            $q->where(function ($sub) use ($user1, $user2) {
+                $sub->where('sender_id', $user1)
+                    ->where('receiver_id', $user2);
+            })
+            ->orWhere(function ($sub) use ($user1, $user2) {
+                $sub->where('sender_id', $user2)
+                    ->where('receiver_id', $user1);
+            });
         })
-        ->orWhere(function ($q) use ($user1, $user2) {
-            $q->where('sender_id', $user2)->where('receiver_id', $user1);
-        })
-        ->whereNotNull('media_url')
+        ->where('message_type', '!=', 'text')
         ->orderBy('created_at', 'desc')
-        ->get(['id', 'sender_id', 'receiver_id', 'message', 'media_url', 'message_type', 'created_at']);
+        ->get(['id', 'sender_id', 'receiver_id', 'media_url', 'message_type', 'created_at']);
 
     return $this->apiResponse('Chat media loaded successfully', $mediaMessages);
 }
