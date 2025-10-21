@@ -12,7 +12,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 // const LARAVEL_API_URL = "http://127.0.0.1:8000";
-// const LARAVEL_API_URL ="https://celebratenow.retrocubedev.com";
+const LARAVEL_API_URL ="https://celebratenow.retrocubedev.com";
 let onlineUsers = new Map();
 
 io.on("connection", (socket) => {
@@ -164,5 +164,5 @@ if (media_url) payload.media_url = media_url;
   });
 });
 
-const PORT = 4000;
+const PORT = 5292;
 server.listen(PORT, () => console.log(` WebSocket server running on port ${PORT}`));
