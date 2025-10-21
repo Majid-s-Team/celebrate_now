@@ -110,11 +110,11 @@ class MessageController extends Controller
     ->where('status', '!=', 'read')
     ->count();
 
-    $lastMessage = !empty($lastMsg->message) ? $lastMsg->message : $lastMsg->media_url;
 
                 return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
                     'last_message' => $lastMsg->message,
+                    'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'time' => $lastMsg->created_at->format('H:i'),
                     'date' => $lastMsg->created_at->format('Y-m-d'),
@@ -159,6 +159,26 @@ class MessageController extends Controller
 
         return $this->apiResponse('Media uploaded successfully', $msg, 201);
     }
+public function chatMedia($user2)
+{
+    $user1 = auth()->id(); // logged-in user
+
+    if (!$user1) {
+        return $this->apiResponse('Unauthorized', null, 401);
+    }
+
+    $mediaMessages = Message::where(function ($q) use ($user1, $user2) {
+            $q->where('sender_id', $user1)->where('receiver_id', $user2);
+        })
+        ->orWhere(function ($q) use ($user1, $user2) {
+            $q->where('sender_id', $user2)->where('receiver_id', $user1);
+        })
+        ->whereNotNull('media_url')
+        ->orderBy('created_at', 'desc')
+        ->get(['id', 'sender_id', 'receiver_id', 'message', 'media_url', 'message_type', 'created_at']);
+
+    return $this->apiResponse('Chat media loaded successfully', $mediaMessages);
+}
 
 
 }
