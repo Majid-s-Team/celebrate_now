@@ -64,6 +64,7 @@ Route::prefix('auth')->group(function () {
         //    Route::post('/follow/{id}', [FollowController::class, 'follow']);
 //     Route::post('/unfollow/{id}', [FollowController::class, 'unfollow']);
         Route::post('/follow-toggle/{id}', [FollowController::class, 'toggleFollow']);
+        Route::get('chat/media/{user2}', [MessageController::class, 'chatMedia']);
 
         Route::get('/followers', [FollowController::class, 'followers']);
         Route::get('/following', [FollowController::class, 'following']);
