@@ -110,6 +110,8 @@ class MessageController extends Controller
     ->where('status', '!=', 'read')
     ->count();
 
+    $lastMessage = !empty($lastMsg->message) ? $lastMsg->message : $lastMsg->media_url;
+
                 return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
                     'last_message' => $lastMsg->message,
