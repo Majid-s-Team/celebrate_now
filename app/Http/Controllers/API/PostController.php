@@ -806,5 +806,57 @@ if (empty($request->event_id)) {
             return $this->sendError('Something went wrong', [$e->getMessage()], 500);
         }
     }
+   public function generateShareLink(Post $post, Request $request)
+    {
+        $url = route('share.post', ['post' => $post->id]);
+        return response()->json([
+            'post_id' => $post->id,
+            'share_link' => $url
+        ]);
+    }
+
+   public function handleRedirect(Request $request, Post $post)
+{
+    $userAgent = $request->header('User-Agent');
+
+    // Deep link to app (app should handle this URL)
+    $customScheme = "myapp://post/{$post->id}"; // change "myapp" to your actual app scheme
+
+    // Store URLs
+    $androidStore = "https://play.google.com/store/apps/details?id=com.retrocubedev.celebratenow"; // replace with your Android package name
+    $iosStore     = "https://apps.apple.com/app/idYOUR_APPLE_ID"; // replace YOUR_APPLE_ID with real Apple ID
+
+    // HTML redirect for mobile
+    $createRedirectHTML = function($schemeLink, $storeLink) {
+        return "
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Redirecting...</title>
+            <meta http-equiv='refresh' content='0; url={$schemeLink}'>
+            <script type='text/javascript'>
+                setTimeout(function() {
+                    window.location.href = '{$storeLink}';
+                }, 1000);
+            </script>
+        </head>
+        <body>
+            Redirecting to app... If not redirected, <a href='{$storeLink}'>click here</a>.
+        </body>
+        </html>
+        ";
+    };
+
+    // Detect mobile platform
+    if ($userAgent && preg_match("/Android/i", $userAgent)) {
+        return response($createRedirectHTML($customScheme, $androidStore));
+    } elseif ($userAgent && preg_match("/iPhone|iPad/i", $userAgent)) {
+        return response($createRedirectHTML($customScheme, $iosStore));
+    } else {
+        // Default fallback if User-Agent not detected (choose Android)
+        return response($createRedirectHTML($customScheme, $androidStore));
+    }
+}
+
 
 }

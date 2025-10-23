@@ -113,3 +113,8 @@ ADD COLUMN `message_type` VARCHAR(255) NULL AFTER `message`;
 
 
 
+
+
+php artisan migrate --path=database/migrations/2025_10_17_164815_create_groups_table.php
+php artisan migrate --path=database/migrations/2025_10_17_164816_create_group_members_table.php
+php artisan migrate --path=database/migrations/2025_10_17_164817_create_group_messages_table.php

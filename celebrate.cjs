@@ -11,8 +11,9 @@ app.use(express.json());
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
-// const LARAVEL_API_URL = "http://127.0.0.1:8000";
-const LARAVEL_API_URL ="https://celebratenow.retrocubedev.com";
+const LARAVEL_API_URL = "http://127.0.0.1:8000";
+// const LARAVEL_API_URL ="https://celebratenow.retrocubedev.com";
+
 let onlineUsers = new Map();
 
 io.on("connection", (socket) => {
@@ -32,20 +33,23 @@ io.on("connection", (socket) => {
     onlineUsers.set(user_id, socket);
     console.log(`User ${user_id} registered`);
     socket.emit("registered", { user_id });
-
     try {
-      const res = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/unseen/${user_id}`);
-      if (res.data?.data?.length > 0) {
-        socket.emit("receive_message", res.data.data);
-        console.log(` Delivered unseen messages to ${user_id}`);
+      const unseenRes = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/unseen/${user_id}`);
+      if (unseenRes.data?.data?.length > 0) {
+        socket.emit("receive_message", unseenRes.data.data);
+        console.log(`Delivered unseen messages to ${user_id}`);
       }
+
       const inboxRes = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/inbox/${user_id}`);
-        if (inboxRes.data?.data?.length > 0) {
-          socket.emit("inbox_list", inboxRes.data.data);
-          console.log(` Sent inbox list to ${user_id}`);
-        }
+      socket.emit("inbox_list", inboxRes.data.data);
+      console.log(` Sent inbox list to ${user_id}`);
+
+      const groupsRes = await axios.get(`${LARAVEL_API_URL}/api/groups/user/${user_id}`);
+      socket.emit("group_list", groupsRes.data.data);
+      console.log(` Sent group list to ${user_id}`);
     } catch (err) {
-      console.log(" Failed to load unseen messages:", err.message);
+      console.error(" Failed to load initial data:", err.message);
+      socket.emit("error", { message: "Failed to load initial chat data" });
     }
   });
 
@@ -53,12 +57,12 @@ io.on("connection", (socket) => {
     let data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
     const { sender_id, receiver_id, message, message_type = "text", media_url } = data;
 
-   if (!sender_id || !receiver_id || (!message && !media_url)) {
-    socket.emit("error", {
-      message: "sender_id, receiver_id, and either message or media_url are required",
-    });
-    return;
-  }
+    if (!sender_id || !receiver_id || (!message && !media_url)) {
+      socket.emit("error", {
+        message: "sender_id, receiver_id, and either message or media_url are required",
+      });
+      return;
+    }
 
     try {
       // const response = await axios.post(`${LARAVEL_API_URL}/api/socket/messages`, {
@@ -69,11 +73,11 @@ io.on("connection", (socket) => {
       //   media_url
       // });
       const payload = { sender_id, receiver_id, message_type };
-       if (message) payload.message = message;
-if (media_url) payload.media_url = media_url;
+      if (message) payload.message = message;
+      if (media_url) payload.media_url = media_url;
 
-    const response = await axios.post(`${LARAVEL_API_URL}/api/socket/messages`, payload);
-        const savedMessage = response.data?.data;
+      const response = await axios.post(`${LARAVEL_API_URL}/api/socket/messages`, payload);
+      const savedMessage = response.data?.data;
       if (!savedMessage) {
         socket.emit("error", { message: "Invalid response from Laravel API" });
         return;
@@ -155,6 +159,171 @@ if (media_url) payload.media_url = media_url;
       console.log(" Mark seen failed:", err.message);
     }
   });
+
+  socket.on("create_group", async (rawData) => {
+    try {
+      let data;
+      if (typeof rawData === "string") {
+        try {
+          data = JSON.parse(rawData);
+        } catch (e) {
+          console.error("Invalid JSON received:", rawData);
+          socket.emit("error", { message: "Invalid JSON format" });
+          return;
+        }
+      } else {
+        data = rawData;
+      }
+
+      const { name, created_by, members = [] } = data;
+
+      if (!name || !created_by) {
+        socket.emit("error", { message: "Both name and created_by are required" });
+        return;
+      }
+
+      const res = await axios.post(
+        `${LARAVEL_API_URL}/api/groups/create`,
+        { name, created_by, members },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      socket.emit("group_created", res.data.data);
+
+    } catch (err) {
+      console.error("Group create error:", err.response?.data || err.message);
+      socket.emit("error", { message: err.response?.data?.message || "Failed to create group" });
+    }
+  });
+
+
+  socket.on("add_member", async (rawData) => {
+    try {
+      const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      const { group_id, added_by, members } = data;
+
+      if (!group_id || !added_by || !Array.isArray(members) || members.length === 0) {
+        socket.emit("error", { message: "Invalid add member request" });
+        return;
+      }
+
+      const res = await axios.post(
+        `${LARAVEL_API_URL}/api/groups/${group_id}/add-member`,
+        { added_by, members },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      socket.emit("member_added", res.data.data);
+
+    } catch (err) {
+      console.error("Add member error:", err.response?.data || err.message);
+      socket.emit("error", { message: "Failed to add members" });
+    }
+  });
+
+  socket.on("remove_member", async (rawData) => {
+    try {
+      const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      const { group_id, removed_by, user_id } = data;
+
+      if (!group_id || !removed_by || !user_id) {
+        socket.emit("error", { message: "Invalid remove member request" });
+        return;
+      }
+
+      const res = await axios.post(
+        `${LARAVEL_API_URL}/api/groups/${group_id}/remove-member`,
+        { removed_by, user_id },
+        { headers: { "Content-Type": "application/json" } }
+      );
+
+      socket.emit("member_removed", res.data.data);
+
+    } catch (err) {
+      console.error("Remove member error:", err.response?.data || err.message);
+      socket.emit("error", { message: "Failed to remove member" });
+    }
+  });
+  socket.on("send_group_message", async (rawData) => {
+    try {
+      const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      const { group_id, sender_id, message, message_type = "text", media_url } = data;
+
+      if (!group_id || !sender_id || (!message && !media_url)) {
+        socket.emit("error", { message: "Invalid message payload" });
+        return;
+      }
+
+      const res = await axios.post(`${LARAVEL_API_URL}/api/groups/message`, {
+        group_id,
+        sender_id,
+        message,
+        message_type,
+        media_url,
+      });
+
+      const msg = res.data.data;
+      if (!msg) {
+        socket.emit("error", { message: "Message not saved" });
+        return;
+      }
+
+      const membersRes = await axios.get(`${LARAVEL_API_URL}/api/groups/${group_id}/members`);
+      const members = membersRes.data.data;
+
+      for (const m of members) {
+        const memberSocket = onlineUsers.get(m.user_id);
+        if (memberSocket) {
+          memberSocket.emit("receive_group_message", msg);
+
+          const historyRes = await axios.get(
+            `${LARAVEL_API_URL}/api/groups/history/${group_id}/${m.user_id}`
+          );
+          const history = historyRes.data.data;
+
+          memberSocket.emit("updated_inbox", {
+            group_id,
+            user_id: m.user_id,
+            messages: history,
+          });
+        }
+      }
+
+      console.log(` Group ${group_id}: Message sent by ${sender_id}`);
+
+    } catch (err) {
+      console.error(" send_group_message error:", err.message);
+      socket.emit("error", { message: "Failed to send group message" });
+    }
+  });
+
+
+
+
+
+  socket.on("get_group_history", async (rawData) => {
+    try {
+      const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+      const { group_id, user_id } = data;
+
+      if (!group_id || !user_id) {
+        socket.emit("error", { message: "group_id and user_id are required" });
+        return;
+      }
+
+      const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
+      const messages = res.data.data;
+
+      socket.emit("group_history", messages);
+
+      console.log(` Sent group history for group ${group_id} to user ${user_id}`);
+    } catch (err) {
+      console.error("get_group_history error:", err.message);
+      socket.emit("error", { message: "Failed to fetch group history" });
+    }
+  });
+
+
 
   socket.on("disconnect", () => {
     if (socket.userId) {
