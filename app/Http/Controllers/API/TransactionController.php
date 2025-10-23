@@ -154,12 +154,21 @@ public function send(Request $request)
     try {
         $user= auth()->user();
         $type  = $request->get("type");
-        $data = $request->validate([
-            'coins' => ['required', 'integer', 'min:1'],
-            'message' => ['nullable', 'string', 'max:1000'],
-            'post_id' => ['nullable', 'exists:posts,id'],
-            'event_id' => ['nullable', 'exists:events,id'],
-        ]);
+
+if (!$request->has('coins') || (int)$request->coins < 1) {
+            return $this->sendError('Please enter a valid coin amount greater than zero.', [], 422);
+        }
+
+
+       $data = $request->validate([
+    'coins' => ['required', 'integer', 'min:1'],
+    'message' => ['nullable', 'string', 'max:1000'],
+    'post_id' => ['nullable', 'exists:posts,id'],
+    'event_id' => ['nullable', 'exists:events,id'],
+], [
+    'coins.min' => 'Please enter a valid coin amount greater than zero.',
+]);
+
 
         $sender = auth()->user();
         $coins = (int) $data['coins'];
