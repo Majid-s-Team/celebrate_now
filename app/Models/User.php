@@ -9,6 +9,7 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\ExcludeBlockedUsersScope;
+use App\Traits\ExcludeDeletedUsersScope;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
@@ -17,7 +18,7 @@ use Carbon\Carbon;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes,ExcludeBlockedUsersScope;
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes,ExcludeBlockedUsersScope,ExcludeDeletedUsersScope;
 
     protected $fillable = [
         'first_name',
