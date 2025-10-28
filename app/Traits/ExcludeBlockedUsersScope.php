@@ -25,7 +25,16 @@ trait ExcludeBlockedUsersScope
                           ->from('user_blocks')
                           ->where('blocker_id', $authId);
                 });
-            } else {
+            }
+            elseif ($table === 'events') {
+    // For events table use 'created_by' instead of 'user_id'
+    $builder->whereNotIn('created_by', function ($query) use ($authId) {
+        $query->select('blocked_id')
+              ->from('user_blocks')
+              ->where('blocker_id', $authId);
+    });
+ }
+  else {
                 // For other tables exclude records whose user_id is blocked
                 $builder->whereNotIn('user_id', function ($query) use ($authId) {
                     $query->select('blocked_id')

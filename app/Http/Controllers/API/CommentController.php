@@ -52,7 +52,7 @@ class CommentController extends Controller
            Notification::create([
                 'user_id' => auth()->id(),
                 'receiver_id' => $post->user->id,
-                'title'   => 'Comment added Successful',
+                'title'   => 'New Comment Received',
                 'message'     => "{$user->first_name} {$user->last_name} commented on your post",
                 'data'        => [
                  'comment_id' => $comment->id,
@@ -93,8 +93,8 @@ class CommentController extends Controller
             Notification::create([
                 'user_id' => $user->id,
                 'receiver_id' => $comment->user->id,
-                'title'   => 'Comment liked Successful',
-                'message'     => "{$user->first_name} {$user->last_name} liked your comment. ",
+                'title'   => "{$user->first_name} {$user->last_name} Liked Your Comment. ",
+                'message'     => "{$user->first_name} {$user->last_name} Liked Your Comment. ",
                 'data' => [
                     'comment_id' => $comment->id,
                     'post_id' => $comment->post_id
@@ -142,7 +142,7 @@ class CommentController extends Controller
            Notification::create([
                 'user_id' => auth()->id(),
                 'receiver_id' => $comment->user->id,
-                'title'   => 'Reply posted Successful',
+                'title'   => 'Comment Reply',
                 'message'     => "{$user->first_name} {$user->last_name} replied to your comment",
                 'data' =>[
                     'comment_id'=>$comment->id,

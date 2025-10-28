@@ -142,7 +142,7 @@ if ($request->event_id) {
         Notification::create([
             'user_id' => auth()->id(), // jisne comment kiya
             'receiver_id' => $receiverId, // jisko notification milegi
-            'title' => 'Event Post added Successfully',
+            'title' => 'New Event Post',
             'message' => "{$user->first_name} {$user->last_name} has just posted something new in the Event {$event->title}",
             'data' => [
                 'event_id'=>$event->id,
@@ -165,8 +165,8 @@ if (empty($request->event_id)) {
         Notification::create([
             'user_id' => auth()->id(), // jisne comment kiya
             'receiver_id' => $receiverId, // jisko notification milegi
-            'title' => 'Post added Successfully',
-            'message' => "{$user->first_name} {$user->last_name} has just posted something new",
+            'title' => ' New Post Alert',
+            'message' => "{$user->first_name} {$user->last_name} created a new post",
             'data'=> [
                 'post_id'=>$post->id
             ],
@@ -371,7 +371,7 @@ if (empty($request->event_id)) {
               Notification::create([
                 'user_id' => $user->id,
                 'receiver_id' => $post->user->id,
-                'title'   => 'Post Liked Successful',
+                'title'   => 'Someone Liked Your Post',
                 'message'     => "{$user->first_name} {$user->last_name} liked your post",
                 'data'=> [
                     'post_id'=>$post->id
@@ -408,7 +408,7 @@ if (empty($request->event_id)) {
             Notification::create([
                 'user_id' => $user->id,
                 'receiver_id' => $userId,
-                'title'   => 'User Tagged Successful',
+                'title'   => 'You Were Tagged',
                 'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
                 'data'=>[
                     'post_id'=>$post->id

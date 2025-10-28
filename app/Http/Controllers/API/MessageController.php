@@ -18,7 +18,7 @@ class MessageController extends Controller
             'sender_id' => 'required|exists:users,id',
             'receiver_id' => 'required|exists:users,id',
             'message' => 'nullable|string',
-            'message_type' => 'nullable|string|in:text,image,video,file,emoji,link',
+            'message_type' => 'nullable|string|in:text,image,video,file,emoji,link,audio',
             'media_url' => 'nullable|string',
         ]);
 
@@ -127,7 +127,7 @@ class MessageController extends Controller
     public function uploadMedia(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip|max:20480', // 20MB max
+            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip,mp3|max:20480', // 20MB max
             'sender_id' => 'required|exists:users,id',
             'receiver_id' => 'required|exists:users,id',
         ]);

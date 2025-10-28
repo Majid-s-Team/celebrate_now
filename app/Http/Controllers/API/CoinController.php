@@ -187,8 +187,8 @@ class CoinController extends Controller
             Notification::create([
                 'user_id' => $user->id,
                 'receiver_id' => $user->id,
-                'title'   => 'Coin Purchase Successful',
-                'message' => 'You purchased ' . $data['coins'] . ' coins for ' . $data['amount'] . ' successfully.',
+                'title'   => 'Coins Purchased Successfully',
+                'message' => 'You purchased ' . $data['coins'] . ' coins for ' . $data['amount'] . ' $.',
                 'data' => [
                     'wallet_id' => $wallet->id,
                     'transaction_id' => $transaction->id

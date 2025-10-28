@@ -59,7 +59,7 @@ class FollowController extends Controller
                Notification::create([
                 'user_id' => auth()->id(),
                 'receiver_id' =>$id,
-                'title'   => 'Follow added Successful',
+                'title'   => 'New Follower Alert',
                 'message'     => "{$user->first_name} {$user->last_name} started following you",
                 'data' => [
                     'follower_id'=>$user->id,
