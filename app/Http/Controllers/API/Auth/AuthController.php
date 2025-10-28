@@ -210,12 +210,14 @@ class AuthController extends Controller
         $rules = [
             'key' => 'required|string|in:profile,cover,post,gallery,logo,video',
         ];
+        $allowedMimes = 'jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp,mp3,wav,aac,ogg,flac,m4a';
 
-        if ($key === 'post') {
-            $rules['image'] = 'required|array';
-            $rules['image.*'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
+
+          if ($key === 'post') {
+        $rules['image'] = 'required|array';
+        $rules['image.*'] = "required|file|mimes:$allowedMimes|max:1048576";
         } else {
-            $rules['image'] = 'required|file|mimes:jpeg,png,jpg,gif,mp4,mov,avi,webm,mkv,flv,wmv,mpeg,m4v,3gp|max:1048576';
+            $rules['image'] = "required|file|mimes:$allowedMimes|max:1048576";
         }
 
         $validator = Validator::make($request->all(), $rules);

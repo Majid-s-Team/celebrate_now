@@ -129,6 +129,16 @@ public function store(Request $request)
                     'role' => 'cohost',
                     'status' => 'joined',
                 ]);
+                  Notification::create([
+            'user_id' => auth()->id(), // jisne event create kiya
+            'receiver_id' => $coId, // jisko notification milegi
+            'title' => 'New Event Created',
+            'message' => "{$user->first_name} {$user->last_name} has just created an Event {$event->title}",
+            'data' => [
+                'event_id' => $event->id
+            ],
+            'type' => 'event'
+        ]);
             }
         }
 
@@ -146,7 +156,7 @@ public function store(Request $request)
             Notification::create([
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $memberId, // jisko notification milegi
-            'title' => 'Event added Successfully',
+            'title' => 'New Event Created',
             'message' => "{$user->first_name} {$user->last_name} has just created an Event {$event->title}",
             'data' => [
                 'event_id' => $event->id
@@ -182,7 +192,7 @@ public function store(Request $request)
             Notification::create([
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $om->user_id, // jisko notification milegi
-            'title' => 'Automated poll added Successfully',
+            'title' => 'Manual Poll Created',
             'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you’ve been included as one of the options.",
             'data' => [
                 'event_id' => $event->id,
@@ -205,9 +215,9 @@ public function store(Request $request)
 
 public function index(Request $request)
 {
-    $user = auth()->user(); // Logged-in user
-    $perPage = $request->get("per_page", 10);
-    $search  = $request->get("search");
+    $user = auth()->user();
+    $perPage = $request->get('per_page', 10);
+    $search  = $request->get('search');
 
     $eventsQuery = Event::with([
         'creator:id,first_name,last_name,email,profile_image',
@@ -224,28 +234,32 @@ public function index(Request $request)
         'posts.comments.replies.user:id,first_name,last_name,profile_image',
         'posts.comments.replies.likes'
     ])
+    // ✅ Only events where the user is a member
     ->whereHas('members', function ($query) use ($user) {
         $query->where('user_id', $user->id);
     })
+    // ✅ Exclude events created by users blocked by the current user
+    ->whereNotIn('created_by', function($query) use ($user) {
+        $query->select('blocked_id')
+              ->from('user_blocks')
+              ->where('blocker_id', $user->id);
+    })
+    ->whereNull('deleted_at')
     ->latest();
 
-    // 🔹 Search filter
+    // Search filter
     if (!empty($search)) {
         $eventsQuery->where(function ($query) use ($search) {
-            $query->where("description", "LIKE", "%{$search}%")
-                  ->orWhere("title", "LIKE", "%{$search}%");
+            $query->where('title', 'LIKE', "%{$search}%")
+                  ->orWhere('description', 'LIKE', "%{$search}%");
         });
     }
 
     $events = $eventsQuery->paginate($perPage)
         ->through(function ($event) {
-            // ✅ Add category name based on event_type_id
             $event->event_type = $event->category->name ?? null;
-
-            // Count total posts
             $event->total_posts = $event->posts->count();
 
-            // Iterate over posts and add counts for likes, comments, and replies
             $event->posts = $event->posts->map(function ($post) {
                 $post->likes_count = $post->likes->count();
                 $post->comments_count = $post->comments->count();
@@ -268,8 +282,11 @@ public function index(Request $request)
             return $event;
         });
 
-    return $this->sendResponse("Events fetched successfully", $events);
+    return $this->sendResponse('Events fetched successfully', $events);
 }
+
+
+
 
 
 
@@ -697,6 +714,165 @@ public function index(Request $request)
 }
 
 
+// public function update(Request $request, $id)
+// {
+//     $user = $request->user();
+//     $event = Event::find($id);
+//     if (!$event)
+//         return $this->sendError("Event not found", [], 404);
+
+//     if ($event->created_by != $user->id) {
+//         return $this->sendError("Unauthorized", [], 403);
+//     }
+
+
+//     $data = $request->validate([
+//         'title' => 'nullable|string|max:255',
+//         'date' => 'nullable|date',
+//         'start_time' => 'nullable',
+//         'end_time' => 'nullable',
+//         'location' => 'nullable|string|max:1000',
+//         'description' => 'nullable|string',
+//         'cover_photo_url' => 'nullable|url',
+//         'event_type_id' => 'nullable|exists:event_categories,id',
+//         'mode' => [Rule::in(['online', 'physical'])],
+//         'physical_type' => [Rule::in(['self_host', 'group_vote'])],
+//         'funding_type' => [Rule::in(['self_financed', 'donation_based'])],
+//         'surprise_contribution' => 'nullable|boolean',
+//         'member_ids' => 'nullable|array',
+//         'member_ids.*' => 'exists:users,id',
+//         'cohost_ids' => 'nullable|array',
+//         'cohost_ids.*' => 'exists:users,id',
+//         'poll_date' => 'nullable|date',
+//         'poll_end_time' => 'nullable|date_format:H:i',
+//         'donation_goal' => 'required_if:funding_type,donation_based|numeric|min:1',
+//         'is_show_donation' => 'required_if:funding_type,donation_based|boolean',
+//         'donation_deadline' => 'nullable|date',
+//         'donation_end_time' => 'nullable|date_format:H:i',
+//     ]);
+
+//     // Custom donation deadline validation
+//     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time']) && !empty($data['date']) && !empty($data['start_time'])) {
+//         $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
+//         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
+
+//         if ($donationDeadline->greaterThanOrEqualTo($eventStart)) {
+//             return $this->sendError("Donation deadline must be set before the event starts.", [], 422);
+//         }
+
+//         if (Carbon::parse($data['date'] ?? $event->date)->isToday() && Carbon::now()->isToday()) {
+//             if ($donationDeadline->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+//                 return $this->sendError("Your event starts soon. Set the donation deadline at least 1 hour before the event begins.", [], 422);
+//             }
+//         }
+//     }
+
+//     // Custom poll_date and poll_end_time validation
+//     if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
+//         $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
+
+//         $pollDate = !empty($data['poll_date']) ? Carbon::parse($data['poll_date']) : $eventStart->copy()->startOfDay();
+//         $pollEnd = !empty($data['poll_end_time']) ? Carbon::parse(($data['poll_date'] ?? $event->date) . ' ' . $data['poll_end_time']) : $pollDate->copy()->endOfDay();
+
+//         if ($pollEnd->greaterThanOrEqualTo($eventStart)) {
+//             return $this->sendError("Voting deadline must be set before the event starts.", [], 422);
+//         }
+
+//         if (Carbon::parse($data['date'] ?? $event->date)->isToday() && Carbon::now()->isToday()) {
+//             if ($pollEnd->greaterThanOrEqualTo($eventStart->copy()->subHour())) {
+//                 return $this->sendError("Your event starts soon. Set the deadline at least 1 hour before the event begins.", [], 422);
+//             }
+//         }
+//     }
+
+//     DB::beginTransaction();
+//     try {
+//         $event->update(array_filter($data, fn($value) => !is_null($value)));
+
+//         if ($event->funding_type === 'donation_based') {
+//             $event->donation_goal = $data['donation_goal'] ?? $event->donation_goal;
+//             $event->donation_deadline = $data['donation_deadline'] ?? $event->donation_deadline;
+//             $event->is_show_donation = $data['is_show_donation'] ?? $event->is_show_donation;
+//             $event->save();
+//         } else {
+//             $event->donation_goal = null;
+//             $event->donation_deadline = null;
+//             $event->is_show_donation = false;
+//             $event->save();
+//         }
+
+//         if (isset($data['cohost_ids'])) {
+//             EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
+//             foreach ($data['cohost_ids'] as $coId) {
+//                 if ($coId == $event->created_by) continue;
+//                 EventMember::updateOrCreate(
+//                     ['event_id' => $event->id, 'user_id' => $coId],
+//                     ['role' => 'cohost', 'status' => 'joined']
+//                 );
+//             }
+//         }
+
+//         if (isset($data['member_ids'])) {
+//             $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
+//             EventMember::where('event_id', $event->id)->where('role', 'member')->whereNotIn('user_id', $incoming)->delete();
+//             foreach ($incoming as $memberId) {
+//                 EventMember::updateOrCreate(
+//                     ['event_id' => $event->id, 'user_id' => $memberId],
+//                     ['role' => 'member', 'status' => 'joined']
+//                 );
+//             }
+//         }
+
+//         if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
+//             $poll = $event->polls()->first();
+//             if (!$poll) {
+//                 $poll = Poll::create([
+//                     'event_id' => $event->id,
+//                     'created_by' => $user->id,
+//                     'status' => 'active',
+//                     'poll_date' => $data['poll_date'] ?? $event->date,
+//                 ]);
+//                 $members = EventMember::where('event_id', $event->id)->get();
+//                 foreach ($members as $m) {
+//                     PollCandidate::create([
+//                         'poll_id' => $poll->id,
+//                         'candidate_id' => $m->user_id,
+//                     ]);
+//                 }
+//             } elseif (isset($data['poll_date'])) {
+//                 $poll->update(['poll_date' => $data['poll_date']]);
+//             }
+//         }
+
+//         if (
+//             $event->mode === 'online' ||
+//             ($event->mode === 'physical' && $event->physical_type === 'self_host')
+//         ) {
+//             $polls = $event->polls()->get();
+//             // foreach ($polls as $poll) {
+//             //     $poll->votes()->delete();
+//             //     if (method_exists($poll, 'candidates')) {
+//             //         $poll->candidates()->delete();
+//             //     }
+//             //     $poll->delete();
+//             // }
+//             foreach ($polls as $poll) {
+//     if (method_exists($poll, 'candidates')) {
+//         $poll->candidates()->delete(); // delete candidates first
+//     }
+//     $poll->votes()->delete();          // then delete votes
+//     $poll->delete();                   // finally delete poll
+// }
+//         }
+
+//         DB::commit();
+//         return $this->sendResponse("Event updated successfully", $event->load('members', 'polls'));
+//     } catch (\Exception $e) {
+//         DB::rollBack();
+//         return $this->sendError("Update failed", $e->getMessage(), 500);
+//     }
+// }
+
 public function update(Request $request, $id)
 {
     $user = $request->user();
@@ -707,7 +883,6 @@ public function update(Request $request, $id)
     if ($event->created_by != $user->id) {
         return $this->sendError("Unauthorized", [], 403);
     }
-
 
     $data = $request->validate([
         'title' => 'nullable|string|max:255',
@@ -734,7 +909,7 @@ public function update(Request $request, $id)
         'donation_end_time' => 'nullable|date_format:H:i',
     ]);
 
-    // Custom donation deadline validation
+    // Custom donation validation
     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time']) && !empty($data['date']) && !empty($data['start_time'])) {
         $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
@@ -750,7 +925,7 @@ public function update(Request $request, $id)
         }
     }
 
-    // Custom poll_date and poll_end_time validation
+    // Custom poll validation
     if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
         $eventStart = Carbon::parse(($data['date'] ?? $event->date) . ' ' . ($data['start_time'] ?? $event->start_time));
 
@@ -784,42 +959,89 @@ public function update(Request $request, $id)
             $event->save();
         }
 
+        // ✅ Handle cohosts and send notification if new
         if (isset($data['cohost_ids'])) {
+            $existingCohosts = EventMember::where('event_id', $event->id)->where('role', 'cohost')->pluck('user_id')->toArray();
             EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
+
             foreach ($data['cohost_ids'] as $coId) {
                 if ($coId == $event->created_by) continue;
+                $wasNew = !in_array($coId, $existingCohosts);
                 EventMember::updateOrCreate(
                     ['event_id' => $event->id, 'user_id' => $coId],
                     ['role' => 'cohost', 'status' => 'joined']
                 );
+
+                if ($wasNew) {
+                    Notification::create([
+                        'user_id' => auth()->id(),
+                        'receiver_id' => $coId,
+                        'title' => 'Added as Event',
+                        'message' => "{$user->first_name} {$user->last_name} added you as a cohost in the event {$event->title}.",
+                        'data' => ['event_id' => $event->id],
+                        'type' => 'event'
+                    ]);
+                }
             }
         }
 
+        // ✅ Handle members and send notification if new
         if (isset($data['member_ids'])) {
+            $existingMembers = EventMember::where('event_id', $event->id)->where('role', 'member')->pluck('user_id')->toArray();
             $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
+
             EventMember::where('event_id', $event->id)->where('role', 'member')->whereNotIn('user_id', $incoming)->delete();
+
             foreach ($incoming as $memberId) {
+                $wasNew = !in_array($memberId, $existingMembers);
                 EventMember::updateOrCreate(
                     ['event_id' => $event->id, 'user_id' => $memberId],
                     ['role' => 'member', 'status' => 'joined']
                 );
+
+                if ($wasNew) {
+                    Notification::create([
+                        'user_id' => auth()->id(),
+                        'receiver_id' => $memberId,
+                        'title' => 'Event Added',
+                        'message' => "{$user->first_name} {$user->last_name} added you to the event {$event->title}.",
+                        'data' => ['event_id' => $event->id],
+                        'type' => 'event'
+                    ]);
+                }
             }
         }
 
+        // ✅ Handle poll (for group_vote)
         if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
             $poll = $event->polls()->first();
+
             if (!$poll) {
                 $poll = Poll::create([
                     'event_id' => $event->id,
                     'created_by' => $user->id,
                     'status' => 'active',
                     'poll_date' => $data['poll_date'] ?? $event->date,
+                    'poll_end_time' => $data['poll_end_time'] ?? '00:00:00',
                 ]);
+
                 $members = EventMember::where('event_id', $event->id)->get();
                 foreach ($members as $m) {
                     PollCandidate::create([
                         'poll_id' => $poll->id,
                         'candidate_id' => $m->user_id,
+                    ]);
+
+                    Notification::create([
+                        'user_id' => auth()->id(),
+                        'receiver_id' => $m->user_id,
+                        'title' => 'Manual Poll Created',
+                        'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and you’ve been included as one of the options.",
+                        'data' => [
+                            'event_id' => $event->id,
+                            'poll_id' => $poll->id
+                        ],
+                        'type' => 'autopoll'
                     ]);
                 }
             } elseif (isset($data['poll_date'])) {
@@ -827,25 +1049,19 @@ public function update(Request $request, $id)
             }
         }
 
+        // ✅ Delete polls if mode changed
         if (
             $event->mode === 'online' ||
             ($event->mode === 'physical' && $event->physical_type === 'self_host')
         ) {
             $polls = $event->polls()->get();
-            // foreach ($polls as $poll) {
-            //     $poll->votes()->delete();
-            //     if (method_exists($poll, 'candidates')) {
-            //         $poll->candidates()->delete();
-            //     }
-            //     $poll->delete();
-            // }
             foreach ($polls as $poll) {
-    if (method_exists($poll, 'candidates')) {
-        $poll->candidates()->delete(); // delete candidates first
-    }
-    $poll->votes()->delete();          // then delete votes
-    $poll->delete();                   // finally delete poll
-}
+                if (method_exists($poll, 'candidates')) {
+                    $poll->candidates()->delete();
+                }
+                $poll->votes()->delete();
+                $poll->delete();
+            }
         }
 
         DB::commit();
@@ -855,6 +1071,7 @@ public function update(Request $request, $id)
         return $this->sendError("Update failed", $e->getMessage(), 500);
     }
 }
+
 
 
 

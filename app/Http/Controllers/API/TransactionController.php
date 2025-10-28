@@ -278,7 +278,7 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
             'user_id' => auth()->id(),
             'receiver_id' => $receiverId, // jisko notification milegi
             'title' => 'Coins Added Successfully',
-            'message' => "{$user->first_name} {$user->last_name} has just send you coins",
+            'message' => "{$user->first_name} {$user->last_name} has just send you {$coins} coins",
             'data' => [
                 'event_id'=>$eventId,
                 'post_id' => $post->id
@@ -458,17 +458,17 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
                     'coins' => $tx->coins,
                     'message' => $tx->message,
                     'contribution_type' => $tx->contribution_type,
-                    'sender' => [
-                        'id' => $tx->sender->id,
-                        'name' => $tx->sender->first_name . ' ' . $tx->sender->last_name,
-                    ],
-                    'receiver' => [
-                        'id' => $tx->receiver->id,
-                        'name' => $tx->receiver->first_name . ' ' . $tx->receiver->last_name,
-                    ],
-                    'type' => $tx->type,
-                    'created_at' => $tx->created_at->toDateTimeString(),
-                ];
+                    'sender' => $tx->sender ? [
+                    'id' => $tx->sender->id,
+                    'name' => trim(($tx->sender->first_name ?? '') . ' ' . ($tx->sender->last_name ?? '')),
+                ] : null,
+                'receiver' => $tx->receiver ? [
+                    'id' => $tx->receiver->id,
+                    'name' => trim(($tx->receiver->first_name ?? '') . ' ' . ($tx->receiver->last_name ?? '')),
+                ] : null,
+                'type' => $tx->type,
+                'created_at' => $tx->created_at?->toDateTimeString(),
+            ];
             });
 
             return $this->sendResponse("Gifts {$type} ", $response);
