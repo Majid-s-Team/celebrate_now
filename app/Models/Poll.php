@@ -4,11 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Traits\ExcludeBlockedUsersScope;
+use App\Traits\ExcludeDeletedUsersScope;
+
 
 
 class Poll extends Model
 {
-    use HasFactory;
+    use HasFactory,ExcludeBlockedUsersScope,ExcludeDeletedUsersScope;
 
     protected $fillable = ['event_id', 'created_by', 'status', 'poll_date','poll_end_time', 'question','auto_poll', 'allow_member_add_option', 'allow_multiple_selection'];
 

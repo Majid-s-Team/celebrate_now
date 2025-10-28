@@ -6,12 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Traits\ExcludeBlockedUsersScope;
+use App\Traits\ExcludeDeletedUsersScope;
+
 
 
 
 class Event extends Model
 {
-    use HasFactory, SoftDeletes,ExcludeBlockedUsersScope;
+    use HasFactory, SoftDeletes,ExcludeBlockedUsersScope,ExcludeDeletedUsersScope;
 
     protected $fillable = [
         'title', 'date', 'start_time', 'end_time', 'location',

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\UserBlock;
+use App\Models\Follow;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use App\Models\UserOtp;
@@ -301,6 +302,16 @@ class AuthController extends Controller
             'blocked_id' => 'required|exists:users,id|different:' . $user->id,
         ]);
 
+       // Delete follow relation in both directions (A→B and B→A)
+    Follow::where(function ($q) use ($user, $request) {
+            $q->where('follower_id', $user->id)
+              ->where('following_id', $request->blocked_id);
+        })
+        ->orWhere(function ($q) use ($user, $request) {
+            $q->where('follower_id', $request->blocked_id)
+              ->where('following_id', $user->id);
+        })
+        ->delete();
         $blockerId = $user->id;
         $blockedId = $request->blocked_id;
 
@@ -344,7 +355,7 @@ class AuthController extends Controller
 
             return response()->json([
                 'status' => 'success',
-                'message' => 'User successfully soft deleted.',
+                'message' => 'User successfully deleted.',
                 'data' => $user
             ], 200);
         } catch (\Exception $e) {
