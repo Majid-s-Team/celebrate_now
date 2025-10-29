@@ -192,7 +192,7 @@ public function store(Request $request)
             Notification::create([
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $om->user_id, // jisko notification milegi
-            'title' => 'Manual Poll Created',
+            'title' => 'Autopoll Created',
             'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you’ve been included as one of the options.",
             'data' => [
                 'event_id' => $event->id,
@@ -1035,7 +1035,7 @@ public function update(Request $request, $id)
                     Notification::create([
                         'user_id' => auth()->id(),
                         'receiver_id' => $m->user_id,
-                        'title' => 'Manual Poll Created',
+                        'title' => 'Autopoll Created',
                         'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and you’ve been included as one of the options.",
                         'data' => [
                             'event_id' => $event->id,
