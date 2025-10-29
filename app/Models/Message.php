@@ -15,7 +15,9 @@ class Message extends Model
         'message',
         'message_type',
         'status',
-        'media_url'
+        'media_url',
+        'created_at',
+        'updated_at'
     ];
 
     public function sender()

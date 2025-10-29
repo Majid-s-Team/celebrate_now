@@ -7,6 +7,8 @@ use Illuminate\Http\Request;
 use App\Models\Message;
 use App\Models\User;
 use App\Traits\ApiResponseTrait;
+use Carbon\Carbon;
+
 
 class MessageController extends Controller
 {
@@ -33,6 +35,8 @@ class MessageController extends Controller
             'message_type' => $validated['message_type'] ?? 'text',
             'media_url' => $validated['media_url'] ?? '',
             'status' => 'sent',
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now()
         ]);
 
         $msg->load(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email']);
@@ -105,8 +109,8 @@ class MessageController extends Controller
                 })
                 ->latest()
                 ->first();
-     $unreadCount = Message::where('sender_id', $user_id)
-    ->where('receiver_id', $chat->chat_with_id)
+     $unreadCount = Message::where('receiver_id', $user_id)
+    ->where('sender_id', $chat->chat_with_id)
     ->where('status', '!=', 'read')
     ->count();
 
@@ -127,7 +131,7 @@ class MessageController extends Controller
     public function uploadMedia(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip,mp3|max:20480', // 20MB max
+            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip,mp3|max:204800', // 200MB max
             'sender_id' => 'required|exists:users,id',
             'receiver_id' => 'required|exists:users,id',
         ]);
