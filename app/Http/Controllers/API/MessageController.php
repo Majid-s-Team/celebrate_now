@@ -15,35 +15,45 @@ class MessageController extends Controller
 {
     use ApiResponseTrait;
 
-    public function socketStore(Request $request)
-    {
-        $validated = $request->validate([
-            'sender_id' => 'required|exists:users,id',
-            'receiver_id' => 'required|exists:users,id',
-            'message' => 'nullable|string',
-            'message_type' => 'nullable|string|in:text,image,video,file,emoji,link,audio',
-            'media_url' => 'nullable|string',
-        ]);
+   public function socketStore(Request $request)
+{
+    $is_block = UserBlock::where('blocker_id', $request->receiver_id)
+        ->where('blocked_id', $request->sender_id)
+        ->exists();
 
-        if (empty($validated['message'] ?? null) && empty($validated['media_url'] ?? null)) {
-            return $this->apiResponse('Either message or media_url is required', null, 422);
-        }
+    $validated = $request->validate([
+        'sender_id'    => 'required|exists:users,id',
+        'receiver_id'  => 'sometimes|nullable|exists:users,id',
+        'message'      => 'nullable|string',
+        'message_type' => 'nullable|string|in:text,image,video,file,emoji,link,audio',
+        'media_url'    => 'nullable|string',
+    ]);
 
-        $msg = Message::create([
-            'sender_id' => $validated['sender_id'],
-            'receiver_id' => $validated['receiver_id'],
-            'message' => $validated['message'] ?? '',
-            'message_type' => $validated['message_type'] ?? 'text',
-            'media_url' => $validated['media_url'] ?? '',
-            'status' => 'sent',
-            'created_at' => Carbon::now(),
-            'updated_at' => Carbon::now()
-        ]);
-
-        $msg->load(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email']);
-
-        return $this->apiResponse('Message sent successfully', $msg, 201);
+    if (empty($validated['message'] ?? null) && empty($validated['media_url'] ?? null)) {
+        return $this->apiResponse('Either message or media_url is required', null, 422);
     }
+
+    $receiver_id = $is_block ? null : ($validated['receiver_id'] ?? null);
+
+    $msg = Message::create([
+        'sender_id'    => $validated['sender_id'],
+        'receiver_id'  => $receiver_id,
+        'message'      => $validated['message'] ?? '',
+        'message_type' => $validated['message_type'] ?? 'text',
+        'media_url'    => $validated['media_url'] ?? '',
+        'status'       => 'sent',
+        'created_at'   => Carbon::now(),
+        'updated_at'   => Carbon::now(),
+    ]);
+
+    $msg->load([
+        'sender:id,first_name,last_name,profile_image,email',
+        'receiver:id,first_name,last_name,profile_image,email'
+    ]);
+
+    return $this->apiResponse('Message sent successfully', $msg, 201);
+}
+
 
 
     public function chatHistory($user1, $user2)
@@ -62,11 +72,12 @@ class MessageController extends Controller
     $is_block = UserBlock::where('blocker_id', $user1)
     ->where('blocked_id',$user2)
     ->exists();
+$messages->transform(function ($msg) use ($is_block) {
+        $msg->is_block = $is_block;
+        return $msg;
+    });
 
-        return $this->apiResponse('Chat history loaded', [
-        'messages' => $messages,
-        'is_block' => $is_block,
-    ]);
+    return $this->apiResponse('Chat history loaded', $messages);
     }
 
     public function unseenMessages($user_id)
