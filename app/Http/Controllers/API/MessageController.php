@@ -120,6 +120,7 @@ class MessageController extends Controller
                     'last_message' => $lastMsg->message,
                     'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
+                    'created_at' => $lastMsg->created_at,
                     'time' => $lastMsg->created_at->format('H:i'),
                     'date' => $lastMsg->created_at->format('Y-m-d'),
                       'unreadCount'  => $unreadCount, // Added
