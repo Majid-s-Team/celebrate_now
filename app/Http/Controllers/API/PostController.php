@@ -184,6 +184,8 @@ if (empty($request->event_id)) {
 
     public function update(Request $request, $id)
     {
+        $user=auth()->user();
+
         $post = Post::with(['media', 'tags'])->findOrFail($id);
 
         if ($post->user_id != auth()->id()) {
@@ -243,7 +245,23 @@ if (empty($request->event_id)) {
                     'post_id' => $post->id,
                     'user_id' => $userId,
                 ]);
+
+                foreach ($request->tag_user_ids as $userId) {
+            PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
+            Notification::create([
+                'user_id' => $user->id,
+                'receiver_id' => $userId,
+                'title'   => 'You Were Tagged',
+                'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
+                'data'=>[
+                    'post_id'=>$post->id
+                ],
+                'type'=> 'userTag'
+            ]);
+            DB::commit();
+        }
             }
+
         }
 
 

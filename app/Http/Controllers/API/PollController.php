@@ -601,7 +601,7 @@ public function createPoll(Request $request)
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Manual poll added Successfully',
-            'message' => "{$user->first_name} {$user->last_name} has just created a pole in the event {$event->title}",
+            'message' => "{$user->first_name} {$user->last_name} has just created a poll in the event {$event->title}",
             'data'=>[
                 'poll_id'=>$poll->id,
                 'event_id'=>$poll->event_id

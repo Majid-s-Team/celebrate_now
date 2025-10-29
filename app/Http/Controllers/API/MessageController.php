@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\User;
 use App\Traits\ApiResponseTrait;
 use Carbon\Carbon;
+use App\Models\UserBlock;
 
 
 class MessageController extends Controller
@@ -57,7 +58,15 @@ class MessageController extends Controller
             ->orderBy('created_at', 'asc')
             ->get();
 
-        return $this->apiResponse('Chat history loaded', $messages);
+
+    $is_block = UserBlock::where('blocker_id', $user1)
+    ->where('blocked_id',$user2)
+    ->exists();
+
+        return $this->apiResponse('Chat history loaded', [
+        'messages' => $messages,
+        'is_block' => $is_block,
+    ]);
     }
 
     public function unseenMessages($user_id)
@@ -114,10 +123,15 @@ class MessageController extends Controller
     ->where('status', '!=', 'read')
     ->count();
 
+    $is_block = UserBlock::where('blocker_id', $user_id)
+    ->where('blocked_id',$chat->chat_with_id)
+    ->exists();
+
 
                 return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
                     'last_message' => $lastMsg->message,
+                    'is_blocked' => $is_block,
                     'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'created_at' => $lastMsg->created_at,
