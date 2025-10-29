@@ -20,54 +20,140 @@ class AuthController extends Controller
 {
     use ImageUploadTrait;
 
-    public function register(Request $request)
-    {
-        //manual validation due to sendError custom method for error responses
-        $validator = Validator::make($request->all(), [
-            'first_name' => 'required|string',
-            'last_name' => 'required|string',
-            'email' => 'required|email|unique:users',
-            'contact_no' => 'nullable|string|unique:users',
-            'profile_type' => ['required', Rule::in(['private', 'public'])],
-            'dob' => 'nullable|date',
-            'password' => 'required|confirmed|min:6',
-            'profile_image' => 'nullable|url',
-        ]);
 
-        if ($validator->fails()) {
-            return $this->sendError('Validation Error', $validator->errors()->all(), 422);
-        }
+public function register(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'first_name'    => 'required|string',
+        'last_name'     => 'required|string',
+        'email'         => 'required|email',
+        'contact_no'    => 'nullable|string',
+        'profile_type'  => ['required', Rule::in(['private', 'public'])],
+        'dob'           => 'nullable|date',
+        'password'      => 'required|confirmed|min:6',
+        'profile_image' => 'nullable|url',
+    ]);
 
-        $exists = User::withTrashed()
-            ->where(function ($q) use ($request) {
-                $q->where('email', $request->email);
-                if ($request->contact_no) {
-                    $q->orWhere('contact_no', $request->contact_no);
-                }
-            })->first();
+    if ($validator->fails()) {
+        return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    }
 
-        if ($exists) {
-            return $this->sendError('Account already exists or was deactivated. Contact support.', [], 403);
-        }
+    // Check if user exists (even soft deleted)
+    $exists = User::withoutGlobalScopes()->withTrashed()
+        ->where(function ($q) use ($request) {
+            $q->where('email', $request->email);
+            if ($request->contact_no) {
+                $q->orWhere('contact_no', $request->contact_no);
+            }
+        })
+        ->first();
 
-        $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name' => $request->last_name,
-            'email' => $request->email,
-            'contact_no' => $request->contact_no,
-            'profile_type' => $request->profile_type,
-            'dob' => $request->dob,
-            'password' => Hash::make($request->password),
-            'role' => 'user',
+    // If an active user exists
+    if ($exists && is_null($exists->deleted_at)) {
+        return $this->sendError('Account already exists.', [], 403);
+    }
+
+    // If a soft-deleted user exists
+    if ($exists && !is_null($exists->deleted_at)) {
+
+        // Just restore instead of creating new one
+        $exists->restore();
+
+        $exists->update([
+            'first_name'    => $request->first_name,
+            'last_name'     => $request->last_name,
+            'contact_no'    => $request->contact_no,
+            'profile_type'  => $request->profile_type,
+            'dob'           => $request->dob,
+            'password'      => Hash::make($request->password),
             'profile_image' => $request->profile_image,
-            'is_active' => true,
+            'is_active'     => true,
         ]);
 
         return $this->sendResponse('User registered successfully', [
-            'token' => $user->createToken('API Token')->plainTextToken,
-            'user' => $user
-        ], 201);
+            'token' => $exists->createToken('API Token')->plainTextToken,
+            'user'  => $exists
+        ], 200);
     }
+
+    // Otherwise create a completely new user
+    // But make sure no duplicate email exists even if soft-deleted was force deleted
+    $alreadyExists = User::where('email', $request->email)->exists();
+    if ($alreadyExists) {
+        return $this->sendError('Email already in use.', [], 403);
+    }
+
+    $user = User::create([
+        'first_name'    => $request->first_name,
+        'last_name'     => $request->last_name,
+        'email'         => $request->email,
+        'contact_no'    => $request->contact_no,
+        'profile_type'  => $request->profile_type,
+        'dob'           => $request->dob,
+        'password'      => Hash::make($request->password),
+        'role'          => 'user',
+        'profile_image' => $request->profile_image,
+        'is_active'     => true,
+    ]);
+
+    return $this->sendResponse('User registered successfully', [
+        'token' => $user->createToken('API Token')->plainTextToken,
+        'user'  => $user
+    ], 201);
+}
+
+
+
+
+
+    // public function register(Request $request)
+    // {
+    //     //manual validation due to sendError custom method for error responses
+    //     $validator = Validator::make($request->all(), [
+    //         'first_name' => 'required|string',
+    //         'last_name' => 'required|string',
+    //         'email' => 'required|email|unique:users',
+    //         'contact_no' => 'nullable|string|unique:users',
+    //         'profile_type' => ['required', Rule::in(['private', 'public'])],
+    //         'dob' => 'nullable|date',
+    //         'password' => 'required|confirmed|min:6',
+    //         'profile_image' => 'nullable|url',
+    //     ]);
+
+    //     if ($validator->fails()) {
+    //         return $this->sendError('Validation Error', $validator->errors()->all(), 422);
+    //     }
+
+    //     $exists = User::withTrashed()
+    //         ->where(function ($q) use ($request) {
+    //             $q->where('email', $request->email);
+    //             if ($request->contact_no) {
+    //                 $q->orWhere('contact_no', $request->contact_no);
+    //             }
+    //         })->first();
+
+    //     if ($exists) {
+    //         return $this->sendError('Account already exists or was deactivated. Contact support.', [], 403);
+    //     }
+
+    //     $user = User::create([
+    //         'first_name' => $request->first_name,
+    //         'last_name' => $request->last_name,
+    //         'email' => $request->email,
+    //         'contact_no' => $request->contact_no,
+    //         'profile_type' => $request->profile_type,
+    //         'dob' => $request->dob,
+    //         'password' => Hash::make($request->password),
+    //         'role' => 'user',
+    //         'profile_image' => $request->profile_image,
+    //         'is_active' => true,
+    //     ]);
+
+    //     return $this->sendResponse('User registered successfully', [
+    //         'token' => $user->createToken('API Token')->plainTextToken,
+    //         'user' => $user
+    //     ], 201);
+    // }
 
     public function login(Request $request)
     {
