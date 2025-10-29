@@ -19,7 +19,8 @@ trait ImageUploadTrait
             'post'    => 'post_images',
             'gallery' => 'gallery_images',
             'logo'    => 'logo_images',
-            'video'   => 'videos', 
+            'video'   => 'videos',
+            'chat' => 'chat'
         ];
 
 
