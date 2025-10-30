@@ -113,7 +113,7 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
         return $this->apiResponse('Messages marked as read');
     }
 
-    public function inbox($user_id)
+   public function inbox($user_id)
     {
         $inbox = Message::selectRaw('
                 CASE
@@ -137,6 +137,12 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
                 })
                 ->latest()
                 ->first();
+
+                if (!$lastMsg) return null;
+
+    $chatWithUser = $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender;
+    if (!$chatWithUser) return null;
+
      $unreadCount = Message::where('receiver_id', $user_id)
     ->where('sender_id', $chat->chat_with_id)
     ->where('status', '!=', 'read')
@@ -152,42 +158,12 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
     ->whereNotNull('deleted_at')
     ->exists();
 
-  $deleted_user = User::withoutGlobalScopes()
-    ->withTrashed()
-    ->select("*")
-    ->where('id', $chat->chat_with_id)
-    ->whereNotNull('deleted_at')
-    ->first();
 
-
-    if($is_deleted){
-
-        return [
-                    'chat_with' => $deleted_user,
-                    'last_message' => $lastMsg->message,
-                    'is_blocked' => $is_block,
-                    'is_deleted' => $is_deleted,
-                    'deleted_user' => $deleted_user,
-                    'media_url' => $lastMsg->media_url,
-                    'message_type' => $lastMsg->message_type ?? 'text',
-                    'created_at' => $lastMsg->created_at,
-                    'time' => $lastMsg->created_at->format('H:i'),
-                    'date' => $lastMsg->created_at->format('Y-m-d'),
-                      'unreadCount'  => $unreadCount, // Added
-                ];
-
-    }
-
-
-else if (!$is_deleted)
-{
-
-                return [
+     return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
                     'last_message' => $lastMsg->message,
                     'is_blocked' => $is_block,
                     'is_deleted' => $is_deleted,
-                    'deleted_user' => $deleted_user,
                     'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'created_at' => $lastMsg->created_at,
@@ -195,12 +171,15 @@ else if (!$is_deleted)
                     'date' => $lastMsg->created_at->format('Y-m-d'),
                       'unreadCount'  => $unreadCount, // Added
                 ];
-            }
-            });
+
+            })
+        ->filter(fn($chat) => !is_null($chat))
+        ->values();
+
+
 
         return $this->apiResponse('Inbox loaded', $inbox);
     }
-
 
     public function uploadMedia(Request $request)
     {
