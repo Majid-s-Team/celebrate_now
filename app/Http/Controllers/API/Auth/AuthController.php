@@ -381,47 +381,32 @@ public function register(Request $request)
 
         return $this->sendResponse('Account deactivated');
     }
-  public function block(Request $request){
-         $user = auth()->user();
+  public function block(Request $request)
+    {
+        $user = auth()->user();
 
-          $request->validate([
+        $request->validate([
             'blocked_id' => 'required|exists:users,id|different:' . $user->id,
         ]);
 
-       // Delete follow relation in both directions (A→B and B→A)
-    Follow::where(function ($q) use ($user, $request) {
-            $q->where('follower_id', $user->id)
-              ->where('following_id', $request->blocked_id);
-        })
-        ->orWhere(function ($q) use ($user, $request) {
-            $q->where('follower_id', $request->blocked_id)
-              ->where('following_id', $user->id);
-        })
-        ->delete();
         $blockerId = $user->id;
         $blockedId = $request->blocked_id;
 
-         if($blockerId == $blockedId){
-                  return $this->sendResponse('User Cannot Block himself');
 
-            }
-        //chech if user already exist in userblocks table
-        $existingBlocks = UserBlock::where('blocker_id',$blockerId)
-                                    ->where('blocked_id',$blockedId)
-                                    ->first();
+        $existing = UserBlock::where('blocker_id', $blockerId)
+            ->where('blocked_id', $blockedId)
+            ->first();
 
-        if($existingBlocks){
-        // User already blocked → unblock now
-        $existingBlocks -> delete();
-         return $this->sendResponse('User unblocked successfully.');
+        if ($existing && $existing->is_active) {
+            UserBlock::unblock($blockerId, $blockedId);
+            return $this->sendResponse('User unblocked successfully.');
+        } else {
+
+            UserBlock::block($blockerId, $blockedId);
+            return $this->sendResponse('User blocked successfully.');
         }
-        else{
-            UserBlock::create(['blocker_id'=>$blockerId,
-            'blocked_id'=>$blockedId]);
-             return $this->sendResponse('User blocked successfully.');
-        }
-
     }
+
 
     public function viewBlockList(){
         $user = auth()->user();
