@@ -72,8 +72,16 @@ class MessageController extends Controller
     $is_block = UserBlock::where('blocker_id', $user1)
     ->where('blocked_id',$user2)
     ->exists();
-$messages->transform(function ($msg) use ($is_block) {
+
+  $is_deleted = User::withTrashed()
+    ->where('id', $user2)
+    ->whereNotNull('deleted_at')
+    ->exists();
+
+
+$messages->transform(function ($msg) use ($is_block,$is_deleted) {
         $msg->is_block = $is_block;
+        $msg->is_deleted = $is_deleted;
         return $msg;
     });
 
@@ -138,11 +146,18 @@ $messages->transform(function ($msg) use ($is_block) {
     ->where('blocked_id',$chat->chat_with_id)
     ->exists();
 
+    $is_deleted = User::withTrashed()
+    ->where('id', $chat->chat_with_id)
+    ->whereNotNull('deleted_at')
+    ->exists();
+
+
 
                 return [
                     'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
                     'last_message' => $lastMsg->message,
                     'is_blocked' => $is_block,
+                    'is_deleted' => $is_deleted,
                     'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'created_at' => $lastMsg->created_at,
