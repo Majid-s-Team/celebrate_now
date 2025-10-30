@@ -46,6 +46,18 @@ trait ExcludeDeletedUsersScope
                 });
             }
 
+            elseif($table === 'messages'){
+                 $builder->whereNotIn('receiver_id', function ($query) {
+                    $query->select('id')
+                        ->from('users')
+                        ->whereNotNull('deleted_at');
+                });
+
+
+
+
+            }
+
             else {
                 if (Schema::hasColumn($table, 'user_id')) {
                     $builder->whereNotIn('user_id', function ($query) {
