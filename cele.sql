@@ -113,3 +113,4 @@ ADD COLUMN `message_type` VARCHAR(255) NULL AFTER `message`;
 
 
 
+php artisan migrate --path=/database/migrations/2025_10_30_125613_add_status_to_user_blocks_table.php
