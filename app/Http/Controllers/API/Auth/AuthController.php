@@ -23,6 +23,7 @@ class AuthController extends Controller
 
 public function register(Request $request)
 {
+
     $validator = Validator::make($request->all(), [
         'first_name'    => 'required|string',
         'last_name'     => 'required|string',
@@ -34,55 +35,23 @@ public function register(Request $request)
         'profile_image' => 'nullable|url',
     ]);
 
+
     if ($validator->fails()) {
         return $this->sendError('Validation Error', $validator->errors()->all(), 422);
     }
 
-    // Check if user exists (even soft deleted)
-    $exists = User::withoutGlobalScopes()->withTrashed()
-        ->where(function ($q) use ($request) {
-            $q->where('email', $request->email);
-            if ($request->contact_no) {
-                $q->orWhere('contact_no', $request->contact_no);
-            }
-        })
-        ->first();
+    // Check if active user exists with same email
+$existingUser = User::withTrashed()->where('email', $request->email)->first();
 
-    // If an active user exists
-    if ($exists && is_null($exists->deleted_at)) {
+    if ($existingUser) {
+
+        if (is_null($existingUser->deleted_at)) {
+        // Active user already exists
         return $this->sendError('Account already exists.', [], 403);
     }
-
-    // If a soft-deleted user exists
-    if ($exists && !is_null($exists->deleted_at)) {
-
-        // Just restore instead of creating new one
-        $exists->restore();
-
-        $exists->update([
-            'first_name'    => $request->first_name,
-            'last_name'     => $request->last_name,
-            'contact_no'    => $request->contact_no,
-            'profile_type'  => $request->profile_type,
-            'dob'           => $request->dob,
-            'password'      => Hash::make($request->password),
-            'profile_image' => $request->profile_image,
-            'is_active'     => true,
-        ]);
-
-        return $this->sendResponse('User registered successfully', [
-            'token' => $exists->createToken('API Token')->plainTextToken,
-            'user'  => $exists
-        ], 200);
     }
 
-    // Otherwise create a completely new user
-    // But make sure no duplicate email exists even if soft-deleted was force deleted
-    $alreadyExists = User::where('email', $request->email)->exists();
-    if ($alreadyExists) {
-        return $this->sendError('Email already in use.', [], 403);
-    }
-
+    // At this point, even if a soft-deleted user exists, we ignore it and create a new user
     $user = User::create([
         'first_name'    => $request->first_name,
         'last_name'     => $request->last_name,
@@ -101,6 +70,7 @@ public function register(Request $request)
         'user'  => $user
     ], 201);
 }
+
 
 
 

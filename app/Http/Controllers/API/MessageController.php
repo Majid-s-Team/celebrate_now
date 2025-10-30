@@ -174,6 +174,7 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
 
             })
         ->filter(fn($chat) => !is_null($chat))
+        ->sortByDesc('created_at')
         ->values();
 
 

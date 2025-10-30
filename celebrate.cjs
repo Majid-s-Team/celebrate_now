@@ -198,15 +198,29 @@ io.on("connection", (socket) => {
   });
 
   // =================== CHAT CLOSE ===================
-  socket.on("chat_close", async (rawData) => {
-    let data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-    const { user_id, with_user_id } = data;
+ socket.on("chat_close", async (rawData) => {
+  let data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+  const { user_id, with_user_id } = data;
 
-  if (user_id) {
-    activeChats.delete(user_id); // remove all active chats for this user
-    console.log(`Chat closed for user ${user_id}. All active chats cleared.`);
+  if (!user_id || !with_user_id) {
+    console.log("chat_close missing user_id or with_user_id");
+    return;
+  }
+
+
+  if (activeChats.has(user_id)) {
+    activeChats.get(user_id).delete(with_user_id);
+
+    if (activeChats.get(user_id).size === 0) {
+      activeChats.delete(user_id);
+    }
+
+    console.log(`chat closed between user ${user_id} and ${with_user_id}`);
+  } else {
+    console.log(`No active chat found for user ${user_id}`);
   }
 });
+
 
   // =================== DISCONNECT ===================
   socket.on("disconnect", () => {
