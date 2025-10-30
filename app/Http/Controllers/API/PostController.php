@@ -110,6 +110,18 @@ class PostController extends Controller
         if ($request->has('tag_user_ids')) {
             foreach ($request->tag_user_ids as $userId) {
                 PostTag::create(['post_id' => $post->id, 'user_id' => $userId]);
+                 Notification::create([
+                'user_id' => $user->id,
+                'receiver_id' => $userId,
+                'title'   => 'You Were Tagged',
+                'message'     => "{$user->first_name} {$user->last_name} tagged you in a post",
+                'data'=>[
+                    'post_id'=>$post->id
+                ],
+                'type'=> 'userTag'
+            ]);
+            DB::commit();
+
             }
         }
 
@@ -246,7 +258,6 @@ if (empty($request->event_id)) {
                     'user_id' => $userId,
                 ]);
 
-                foreach ($request->tag_user_ids as $userId) {
             PostTag::firstOrCreate(['post_id' => $id, 'user_id' => $userId]);
             Notification::create([
                 'user_id' => $user->id,
@@ -260,7 +271,7 @@ if (empty($request->event_id)) {
             ]);
             DB::commit();
         }
-            }
+
 
         }
 

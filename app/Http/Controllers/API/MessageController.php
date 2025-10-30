@@ -146,18 +146,28 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
     ->where('blocked_id',$chat->chat_with_id)
     ->exists();
 
-    $is_deleted = User::withTrashed()
+    $is_deleted = User::withoutGlobalScopes()
+    ->withTrashed()
     ->where('id', $chat->chat_with_id)
     ->whereNotNull('deleted_at')
     ->exists();
 
+  $deleted_user = User::withoutGlobalScopes()
+    ->withTrashed()
+    ->select("*")
+    ->where('id', $chat->chat_with_id)
+    ->whereNotNull('deleted_at')
+    ->first();
 
 
-                return [
-                    'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
+    if($is_deleted){
+
+        return [
+                    'chat_with' => $deleted_user,
                     'last_message' => $lastMsg->message,
                     'is_blocked' => $is_block,
                     'is_deleted' => $is_deleted,
+                    'deleted_user' => $deleted_user,
                     'media_url' => $lastMsg->media_url,
                     'message_type' => $lastMsg->message_type ?? 'text',
                     'created_at' => $lastMsg->created_at,
@@ -165,10 +175,33 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
                     'date' => $lastMsg->created_at->format('Y-m-d'),
                       'unreadCount'  => $unreadCount, // Added
                 ];
+
+    }
+
+
+else if (!$is_deleted)
+{
+
+                return [
+                    'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
+                    'last_message' => $lastMsg->message,
+                    'is_blocked' => $is_block,
+                    'is_deleted' => $is_deleted,
+                    'deleted_user' => $deleted_user,
+                    'media_url' => $lastMsg->media_url,
+                    'message_type' => $lastMsg->message_type ?? 'text',
+                    'created_at' => $lastMsg->created_at,
+                    'time' => $lastMsg->created_at->format('H:i'),
+                    'date' => $lastMsg->created_at->format('Y-m-d'),
+                      'unreadCount'  => $unreadCount, // Added
+                ];
+            }
             });
 
         return $this->apiResponse('Inbox loaded', $inbox);
     }
+
+
     public function uploadMedia(Request $request)
     {
         $request->validate([

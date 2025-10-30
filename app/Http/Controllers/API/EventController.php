@@ -50,7 +50,7 @@ public function store(Request $request)
         'donation_end_time' => 'nullable|date_format:H:i',
     ]);
 
-    // 👉 Custom donation deadline validation
+    // ðŸ‘‰ Custom donation deadline validation
     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time'])) {
         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
@@ -66,7 +66,7 @@ public function store(Request $request)
         }
     }
 
-    // 👉 Custom poll_date and poll_end_time validation
+    // ðŸ‘‰ Custom poll_date and poll_end_time validation
     if (!empty($data['poll_date']) || !empty($data['poll_end_time'])) {
         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
 
@@ -193,7 +193,7 @@ public function store(Request $request)
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Autopoll Created',
-            'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you’ve been included as one of the options.",
+            'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and youâ€™ve been included as one of the options.",
             'data' => [
                 'event_id' => $event->id,
                 'poll_id' => $poll->id
@@ -234,11 +234,11 @@ public function index(Request $request)
         'posts.comments.replies.user:id,first_name,last_name,profile_image',
         'posts.comments.replies.likes'
     ])
-    // ✅ Only events where the user is a member
+    // âœ… Only events where the user is a member
     ->whereHas('members', function ($query) use ($user) {
         $query->where('user_id', $user->id);
     })
-    // ✅ Exclude events created by users blocked by the current user
+    // âœ… Exclude events created by users blocked by the current user
     ->whereNotIn('created_by', function($query) use ($user) {
         $query->select('blocked_id')
               ->from('user_blocks')
@@ -321,7 +321,7 @@ public function index(Request $request)
 
 //     ]);
 
-//     // 👉 Custom donation deadline validation
+//     // ðŸ‘‰ Custom donation deadline validation
 //     if (!empty($data['donation_deadline']) && !empty($data['donation_end_time'])) {
 //         $eventStart = Carbon::parse($data['date'] . ' ' . $data['start_time']);
 //         $donationDeadline = Carbon::parse($data['donation_deadline'] . ' ' . $data['donation_end_time']);
@@ -339,7 +339,7 @@ public function index(Request $request)
 //         }
 //     }
 
-//     // 👉 Custom poll_date validation
+//     // ðŸ‘‰ Custom poll_date validation
 //     if (!empty($data['poll_date'])) {
 //         $eventStartDate = Carbon::parse($data['date'])->startOfDay();
 //         $pollDate = Carbon::parse($data['poll_date'])->startOfDay();
@@ -475,7 +475,7 @@ public function index(Request $request)
 //     })
 //     ->latest();
 
-//     // 🔹 Search filter
+//     // ðŸ”¹ Search filter
 //     if (!empty($search)) {
 //         $eventsQuery->where(function ($query) use ($search) {
 //             $query->where("description", "LIKE", "%{$search}%")
@@ -707,7 +707,7 @@ public function index(Request $request)
         return $this->sendError("Event not found or you are not a member", [], 404);
     }
 
-    // ✅Add category name based on event_type_id
+    // âœ…Add category name based on event_type_id
     $event->event_type = $event->category->name ?? null;
 
     return $this->sendResponse("Event fetched successfully", $event);
@@ -959,7 +959,7 @@ public function update(Request $request, $id)
             $event->save();
         }
 
-        // ✅ Handle cohosts and send notification if new
+        // âœ… Handle cohosts and send notification if new
         if (isset($data['cohost_ids'])) {
             $existingCohosts = EventMember::where('event_id', $event->id)->where('role', 'cohost')->pluck('user_id')->toArray();
             EventMember::where('event_id', $event->id)->where('role', 'cohost')->delete();
@@ -985,7 +985,7 @@ public function update(Request $request, $id)
             }
         }
 
-        // ✅ Handle members and send notification if new
+        // âœ… Handle members and send notification if new
         if (isset($data['member_ids'])) {
             $existingMembers = EventMember::where('event_id', $event->id)->where('role', 'member')->pluck('user_id')->toArray();
             $incoming = collect($data['member_ids'])->filter(fn($id) => $id != $event->created_by)->values()->all();
@@ -1012,7 +1012,7 @@ public function update(Request $request, $id)
             }
         }
 
-        // ✅ Handle poll (for group_vote)
+        // âœ… Handle poll (for group_vote)
         if ($event->mode === 'physical' && $event->physical_type === 'group_vote') {
             $poll = $event->polls()->first();
 
@@ -1036,7 +1036,7 @@ public function update(Request $request, $id)
                         'user_id' => auth()->id(),
                         'receiver_id' => $m->user_id,
                         'title' => 'Autopoll Created',
-                        'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and you’ve been included as one of the options.",
+                        'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and youâ€™ve been included as one of the options.",
                         'data' => [
                             'event_id' => $event->id,
                             'poll_id' => $poll->id
@@ -1049,7 +1049,7 @@ public function update(Request $request, $id)
             }
         }
 
-        // ✅ Delete polls if mode changed
+        // âœ… Delete polls if mode changed
         if (
             $event->mode === 'online' ||
             ($event->mode === 'physical' && $event->physical_type === 'self_host')
@@ -1243,7 +1243,7 @@ public function getUserEventPolls(Request $request)
             'posts.comments.user',
             'posts.comments.replies.user',
             'posts.comments.replies.likes',
-            'category', // 👈 sahi relation
+            'category', // ðŸ‘ˆ sahi relation
         ]);
 
         if ($eventId) {
@@ -1434,21 +1434,21 @@ public function deleteMember(Request $request)
 //         // Get events with all relationships
 //         $events = $eventsQuery->get();
 
-//         // ✅ Optional: filter out members with no user
+//         // âœ… Optional: filter out members with no user
 //         $events->each(function ($event) {
 //             $event->members = $event->members
 //                 ->filter(fn($member) => $member->user !== null)
 //                 ->values();
 //         });
 
-//         // ✅ Optional: Filter polls where creator is not null
+//         // âœ… Optional: Filter polls where creator is not null
 //         $events->each(function ($event) {
 //             $event->polls = $event->polls
 //                 ->filter(fn($poll) => $poll->creator !== null)
 //                 ->values();
 //         });
 
-//         // ✅ Optional: Filter posts where user exists
+//         // âœ… Optional: Filter posts where user exists
 //         $events->each(function ($event) {
 //             $event->posts = $event->posts
 //                 ->filter(fn($post) => $post->user !== null)
