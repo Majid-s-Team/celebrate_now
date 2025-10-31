@@ -351,55 +351,48 @@ $existingUser = User::withTrashed()->where('email', $request->email)->first();
 
         return $this->sendResponse('Account deactivated');
     }
-  public function block(Request $request){
-         $user = auth()->user();
 
-          $request->validate([
+  public function block(Request $request)
+    {
+        $user = auth()->user();
+
+        $request->validate([
             'blocked_id' => 'required|exists:users,id|different:' . $user->id,
         ]);
 
-       // Delete follow relation in both directions (A→B and B→A)
-    Follow::where(function ($q) use ($user, $request) {
-            $q->where('follower_id', $user->id)
-              ->where('following_id', $request->blocked_id);
-        })
-        ->orWhere(function ($q) use ($user, $request) {
-            $q->where('follower_id', $request->blocked_id)
-              ->where('following_id', $user->id);
-        })
-        ->delete();
         $blockerId = $user->id;
         $blockedId = $request->blocked_id;
 
-         if($blockerId == $blockedId){
-                  return $this->sendResponse('User Cannot Block himself');
-
-            }
-        //chech if user already exist in userblocks table
-        $existingBlocks = UserBlock::where('blocker_id',$blockerId)
-                                    ->where('blocked_id',$blockedId)
-                                    ->first();
-
-        if($existingBlocks){
-        // User already blocked → unblock now
-        $existingBlocks -> delete();
-         return $this->sendResponse('User unblocked successfully.');
-        }
-        else{
-            UserBlock::create(['blocker_id'=>$blockerId,
-            'blocked_id'=>$blockedId]);
-             return $this->sendResponse('User blocked successfully.');
+        if($blockerId == $blockedId)
+        {
+            return $this->sendResponse("User can't block himself",[],422);
         }
 
+        $existing = UserBlock::where('blocker_id', $blockerId)
+            ->where('blocked_id', $blockedId)
+            ->first();
+
+        if ($existing && $existing->is_active) {
+            UserBlock::unblock($blockerId, $blockedId);
+            return $this->sendResponse('User unblocked successfully.');
+        } else {
+
+            UserBlock::block($blockerId, $blockedId);
+            return $this->sendResponse('User blocked successfully.');
+        }
     }
 
-    public function viewBlockList(){
+
+      public function viewBlockList(){
         $user = auth()->user();
         $userBlocks = UserBlock::with('blocked:id,first_name,last_name,profile_image')
         ->where('blocker_id',$user->id)->get();
 
         return $this->sendResponse('User Blocked List', $userBlocks, 200);
     }
+
+
+
     public function softDeleteUser(Request $request, $userId)
     {
         try {
