@@ -6,93 +6,157 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Message;
 use App\Models\User;
+use App\Models\UserBlock;
 use App\Traits\ApiResponseTrait;
 use Carbon\Carbon;
-use App\Models\UserBlock;
-
 
 class MessageController extends Controller
 {
     use ApiResponseTrait;
 
-   public function socketStore(Request $request)
-{
-    $is_block = UserBlock::where('blocker_id', $request->receiver_id)
-        ->where('blocked_id', $request->sender_id)
-        ->exists();
+    /**
+     * Send a message (no broadcasting)
+     */
+    public function socketStore(Request $request)
+    {
+        $validated = $request->validate([
+            'sender_id' => 'required|exists:users,id',
+            'receiver_id' => 'required|exists:users,id',
+            'message' => 'nullable|string',
+            'message_type' => 'nullable|string|in:text,image,video,file,emoji,link,audio',
+            'media_url' => 'nullable|string',
+        ]);
 
-    $validated = $request->validate([
-        'sender_id'    => 'required|exists:users,id',
-        'receiver_id'  => 'sometimes|nullable|exists:users,id',
-        'message'      => 'nullable|string',
-        'message_type' => 'nullable|string|in:text,image,video,file,emoji,link,audio',
-        'media_url'    => 'nullable|string',
-    ]);
+        if (empty($validated['message'] ?? null) && empty($validated['media_url'] ?? null)) {
+            return $this->apiResponse('Either message or media_url is required', null, 422);
+        }
 
-    if (empty($validated['message'] ?? null) && empty($validated['media_url'] ?? null)) {
-        return $this->apiResponse('Either message or media_url is required', null, 422);
+        $senderId = $validated['sender_id'];
+        $receiverId = $validated['receiver_id'];
+
+        // CASE 1: Sender has blocked receiver → cannot send
+        if (UserBlock::isBlocked($senderId, $receiverId)) {
+            return $this->apiResponse("You can't send messages to this user because you have blocked them.", null, 403);
+        }
+
+        // CASE 2: Receiver has blocked sender → hide from receiver
+        $isBlockedByReceiver = UserBlock::isBlocked($receiverId, $senderId);
+
+        $msg = Message::create([
+            'sender_id' => $senderId,
+            'receiver_id' => $receiverId,
+            'message' => $validated['message'] ?? '',
+            'message_type' => $validated['message_type'] ?? 'text',
+            'media_url' => $validated['media_url'] ?? '',
+            'status' => 'sent',
+            'hidden_for_receiver' => $isBlockedByReceiver,
+        ]);
+
+        $msg->load(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email']);
+
+        return $this->apiResponse('Message sent successfully', $msg, 201);
     }
 
-    $receiver_id = $is_block ? null : ($validated['receiver_id'] ?? null);
+    /**
+     * Fetch chat history between two users
+     */
+public function chatHistory($user1, $user2)
+{
+    // 🔹 Fetch all messages between both users
+    $messages = Message::with([
+            'sender:id,first_name,last_name,profile_image,email',
+            'receiver:id,first_name,last_name,profile_image,email'
+        ])
+        ->where(function ($q) use ($user1, $user2) {
+            $q->where('sender_id', $user1)->where('receiver_id', $user2);
+        })
+        ->orWhere(function ($q) use ($user1, $user2) {
+            $q->where('sender_id', $user2)->where('receiver_id', $user1);
+        })
+        ->orderBy('created_at', 'asc')
+        ->get();
 
-    $msg = Message::create([
-        'sender_id'    => $validated['sender_id'],
-        'receiver_id'  => $receiver_id,
-        'message'      => $validated['message'] ?? '',
-        'message_type' => $validated['message_type'] ?? 'text',
-        'media_url'    => $validated['media_url'] ?? '',
-        'status'       => 'sent',
-        'created_at'   => Carbon::now(),
-        'updated_at'   => Carbon::now(),
-    ]);
+    // 🔹 Get all block and unblock timeline records (for reference)
+    $blocks = UserBlock::where(function ($q) use ($user1, $user2) {
+            $q->where('blocker_id', $user1)->where('blocked_id', $user2);
+        })
+        ->orWhere(function ($q) use ($user1, $user2) {
+            $q->where('blocker_id', $user2)->where('blocked_id', $user1);
+        })
+        ->orderBy('blocked_at', 'asc')
+        ->get();
 
-    $msg->load([
-        'sender:id,first_name,last_name,profile_image,email',
-        'receiver:id,first_name,last_name,profile_image,email'
-    ]);
+    // 🔹 Apply logic for visibility
+    $filtered = $messages->filter(function ($msg) use ($user1, $user2, $blocks) {
 
-    return $this->apiResponse('Message sent successfully', $msg, 201);
-}
+        // Case 1️⃣: Message hidden for receiver
+        if ($msg->hidden_for_receiver && $msg->receiver_id == $user1) {
+            return false;
+        }
 
+        // Get last block record (if exists)
+        $activeBlock = $blocks->where('is_active', true)->first();
+        $lastBlock = $blocks->sortByDesc('blocked_at')->first();
 
+        // Case 2️⃣: If current user is blocker (user1 blocked user2)
+        if ($activeBlock && $activeBlock->blocker_id == $user1) {
+            // Blocker cannot see any chat (even old ones) after block
+            if ($msg->sender_id == $user2 && $msg->created_at > $activeBlock->blocked_at) {
+                return false;  // Hide new messages from blocked user after blocking
+            }
+        }
 
-    public function chatHistory($user1, $user2)
-    {
-        $messages = Message::with(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email'])
-            ->where(function ($q) use ($user1, $user2) {
-                $q->where('sender_id', $user1)->where('receiver_id', $user2);
-            })
-            ->orWhere(function ($q) use ($user1, $user2) {
-                $q->where('sender_id', $user2)->where('receiver_id', $user1);
-            })
-            ->orderBy('created_at', 'asc')
-            ->get();
+        // Case 3️⃣: After unblock, hide all messages sent during block period
+        if ($lastBlock && $lastBlock->blocker_id == $user1) {
+            // hide messages from blocked user that were created during block period
+            if (
+                $msg->sender_id == $lastBlock->blocked_id &&
+                $msg->created_at > $lastBlock->blocked_at &&
+                ($lastBlock->unblocked_at == null || $msg->created_at < $lastBlock->unblocked_at)
+            ) {
+                return false;
+            }
+        }
 
+        // Otherwise visible
+        return true;
+    });
 
+    // 🔹 Current block status
     $is_block = UserBlock::where('blocker_id', $user1)
-    ->where('blocked_id',$user2)
-    ->exists();
+        ->where('blocked_id', $user2)
+        ->where('is_active', true)
+        ->exists();
 
-  $is_deleted = User::withTrashed()
-    ->where('id', $user2)
-    ->whereNotNull('deleted_at')
-    ->exists();
+    // 🔹 Check if user2 deleted
+    $is_deleted = User::withTrashed()
+        ->where('id', $user2)
+        ->whereNotNull('deleted_at')
+        ->exists();
 
-
-$messages->transform(function ($msg) use ($is_block,$is_deleted) {
+    // 🔹 Add meta
+    $filtered->transform(function ($msg) use ($is_block, $is_deleted) {
         $msg->is_block = $is_block;
         $msg->is_deleted = $is_deleted;
         return $msg;
     });
 
-    return $this->apiResponse('Chat history loaded', $messages);
-    }
+    return $this->apiResponse('Chat history loaded', $filtered->values());
+}
 
+
+
+
+
+    /**
+     * Unseen messages
+     */
     public function unseenMessages($user_id)
     {
         $messages = Message::with(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email'])
             ->where('receiver_id', $user_id)
             ->where('status', 'sent')
+            ->where('hidden_for_receiver', false)
             ->orderByDesc('created_at')
             ->get();
 
@@ -101,6 +165,9 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
         return $this->apiResponse('Unseen messages fetched', $messages);
     }
 
+    /**
+     * Mark as seen
+     */
     public function markSeen(Request $request)
     {
         $request->validate([
@@ -109,83 +176,79 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
         ]);
 
         Message::whereIn('id', $request->message_ids)->update(['status' => 'read']);
-
         return $this->apiResponse('Messages marked as read');
     }
 
+    /**
+     * Inbox list
+     */
    public function inbox($user_id)
-    {
-        $inbox = Message::selectRaw('
-                CASE
-                    WHEN sender_id = ? THEN receiver_id
-                    ELSE sender_id
-                END as chat_with_id,
-                MAX(created_at) as last_message_time
-            ', [$user_id])
-            ->where(function ($q) use ($user_id) {
-                $q->where('sender_id', $user_id)->orWhere('receiver_id', $user_id);
-            })
-            ->groupBy('chat_with_id')
-            ->with(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email'])
-            ->get()
-            ->map(function ($chat) use ($user_id) {
-                $lastMsg = Message::where(function ($q) use ($user_id, $chat) {
-                    $q->where('sender_id', $user_id)->where('receiver_id', $chat->chat_with_id);
+{
+    // 🔹 Get list of users blocked by the current user
+    $blockedUsers = UserBlock::where('blocker_id', $user_id)
+        ->where('is_active', true)
+        ->pluck('blocked_id');
+
+    // 🔹 Fetch inbox (including blocked users)
+    $inbox = Message::selectRaw('
+        CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as chat_with_id,
+        MAX(created_at) as last_message_time
+    ', [$user_id])
+        ->where(function ($q) use ($user_id) {
+            $q->where('sender_id', $user_id)
+              ->orWhere('receiver_id', $user_id);
+        })
+        ->groupBy('chat_with_id')
+        ->get()
+        ->map(function ($chat) use ($user_id, $blockedUsers) {
+            $lastMsg = Message::where(function ($q) use ($user_id, $chat) {
+                    $q->where('sender_id', $user_id)
+                      ->where('receiver_id', $chat->chat_with_id);
                 })
                 ->orWhere(function ($q) use ($user_id, $chat) {
-                    $q->where('sender_id', $chat->chat_with_id)->where('receiver_id', $user_id);
+                    $q->where('sender_id', $chat->chat_with_id)
+                      ->where('receiver_id', $user_id);
                 })
+                ->where('hidden_for_receiver', false)
                 ->latest()
                 ->first();
 
-                if (!$lastMsg) return null;
+            if (!$lastMsg) return null;
 
-    $chatWithUser = $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender;
-    if (!$chatWithUser) return null;
+            // 🔹 Unread message count
+            $unreadCount = Message::where('receiver_id', $user_id)
+                ->where('sender_id', $chat->chat_with_id)
+                ->where('status', '!=', 'read')
+                ->where('hidden_for_receiver', false)
+                ->count();
 
-     $unreadCount = Message::where('receiver_id', $user_id)
-    ->where('sender_id', $chat->chat_with_id)
-    ->where('status', '!=', 'read')
-    ->count();
+            // 🔹 Check if current user has blocked this user
+            $isBlocked = $blockedUsers->contains($chat->chat_with_id);
 
-    $is_block = UserBlock::where('blocker_id', $user_id)
-    ->where('blocked_id',$chat->chat_with_id)
-    ->exists();
-
-    $is_deleted = User::withoutGlobalScopes()
-    ->withTrashed()
-    ->where('id', $chat->chat_with_id)
-    ->whereNotNull('deleted_at')
-    ->exists();
-
-
-     return [
-                    'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
-                    'last_message' => $lastMsg->message,
-                    'is_blocked' => $is_block,
-                    'is_deleted' => $is_deleted,
-                    'media_url' => $lastMsg->media_url,
-                    'message_type' => $lastMsg->message_type ?? 'text',
-                    'created_at' => $lastMsg->created_at,
-                    'time' => $lastMsg->created_at->format('H:i'),
-                    'date' => $lastMsg->created_at->format('Y-m-d'),
-                      'unreadCount'  => $unreadCount, // Added
-                ];
-
-            })
-        ->filter(fn($chat) => !is_null($chat))
-        ->sortByDesc('created_at')
+            return [
+                'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
+                'last_message' => $lastMsg->message,
+                'media_url' => $lastMsg->media_url,
+                'message_type' => $lastMsg->message_type ?? 'text',
+                'created_at' => $lastMsg->created_at,
+                'unreadCount' => $unreadCount,
+                'is_blocked' => $isBlocked, // Add is_blocked flag
+            ];
+        })
+        ->filter()
         ->values();
 
+    return $this->apiResponse('Inbox loaded', $inbox);
+}
 
 
-        return $this->apiResponse('Inbox loaded', $inbox);
-    }
-
+    /**
+     * Upload media message
+     */
     public function uploadMedia(Request $request)
     {
         $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip,mp3|max:204800', // 200MB max
+            'file' => 'required|file|mimes:jpg,jpeg,png,gif,mp4,mov,avi,pdf,doc,docx,zip,mp3|max:204800',
             'sender_id' => 'required|exists:users,id',
             'receiver_id' => 'required|exists:users,id',
         ]);
@@ -211,36 +274,40 @@ $messages->transform(function ($msg) use ($is_block,$is_deleted) {
             'message_type' => $messageType,
             'media_url' => $mediaUrl,
             'status' => 'sent',
+            'hidden_for_receiver' => UserBlock::isBlocked($request->receiver_id, $request->sender_id),
         ]);
 
         $msg->load(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email']);
 
         return $this->apiResponse('Media uploaded successfully', $msg, 201);
     }
-public function chatMedia($user2)
-{
-    $user1 = auth()->id(); // logged-in user
 
-    if (!$user1) {
-        return $this->apiResponse('Unauthorized', null, 401);
-    }
+    /**
+     * Fetch all media in chat
+     */
+    public function chatMedia($user2)
+    {
+        $user1 = auth()->id();
 
-    $mediaMessages = Message::where(function ($q) use ($user1, $user2) {
-            $q->where(function ($sub) use ($user1, $user2) {
-                $sub->where('sender_id', $user1)
-                    ->where('receiver_id', $user2);
+        if (!$user1) {
+            return $this->apiResponse('Unauthorized', null, 401);
+        }
+
+        $mediaMessages = Message::where(function ($q) use ($user1, $user2) {
+                $q->where(function ($sub) use ($user1, $user2) {
+                    $sub->where('sender_id', $user1)
+                        ->where('receiver_id', $user2);
+                })
+                ->orWhere(function ($sub) use ($user1, $user2) {
+                    $sub->where('sender_id', $user2)
+                        ->where('receiver_id', $user1);
+                });
             })
-            ->orWhere(function ($sub) use ($user1, $user2) {
-                $sub->where('sender_id', $user2)
-                    ->where('receiver_id', $user1);
-            });
-        })
-        ->where('message_type', '!=', 'text')
-        ->orderBy('created_at', 'desc')
-        ->get(['id', 'sender_id', 'receiver_id', 'media_url', 'message_type', 'created_at']);
+            ->where('message_type', '!=', 'text')
+            ->where('hidden_for_receiver', false)
+            ->orderBy('created_at', 'desc')
+            ->get(['id', 'sender_id', 'receiver_id', 'media_url', 'message_type', 'created_at']);
 
-    return $this->apiResponse('Chat media loaded successfully', $mediaMessages);
-}
-
-
+        return $this->apiResponse('Chat media loaded successfully', $mediaMessages);
+    }
 }

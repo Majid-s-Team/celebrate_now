@@ -20,9 +20,13 @@ class Message extends Model
         'status',
         'media_url',
         'created_at',
-        'updated_at'
+        'updated_at',
+        'hidden_for_receiver'
     ];
 
+    protected $casts = [
+    'hidden_for_receiver' => 'boolean',
+];
     public function sender()
     {
         return $this->belongsTo(User::class, 'sender_id');
