@@ -46,6 +46,20 @@ trait ExcludeDeletedUsersScope
                 });
             }
 
+             elseif ($table === 'coin_transactions') {
+                $builder->whereNotIn('sender_id', function ($query) {
+                    $query->select('id')
+                        ->from('users')
+                        ->whereNotNull('deleted_at');
+                })
+                ->whereNotIn('receiver_id', function ($query) {
+                    $query->select('id')
+                        ->from('users')
+                        ->whereNotNull('deleted_at');
+                });
+            }
+
+
             elseif($table === 'messages'){
                  $builder->whereNotIn('receiver_id', function ($query) {
                     $query->select('id')
