@@ -193,7 +193,7 @@ public function store(Request $request)
             'user_id' => auth()->id(), // jisne event create kiya
             'receiver_id' => $om->user_id, // jisko notification milegi
             'title' => 'Autopoll Created',
-            'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and youâ€™ve been included as one of the options.",
+            'message' => "{$user->first_name} {$user->last_name} has created a poll in the event {$event->title}, and you have been included as one of the options.",
             'data' => [
                 'event_id' => $event->id,
                 'poll_id' => $poll->id

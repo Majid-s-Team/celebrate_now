@@ -534,7 +534,7 @@ public function createPoll(Request $request)
 {
     $user = $request->user();
 
-    // Validate request inputs
+
     $data = $request->validate([
         'event_id' => 'required|exists:events,id',
         'question' => 'required|string|max:255',
@@ -545,7 +545,6 @@ public function createPoll(Request $request)
         'allow_multiple_selection' => 'boolean',
     ]);
 
-    // Check if user is host or cohost of the event
     $isAuthorized = EventMember::where('event_id', $data['event_id'])
         ->where('user_id', $user->id)
         ->whereIn('role', ['host', 'cohost'])
@@ -555,70 +554,62 @@ public function createPoll(Request $request)
         return $this->sendError('Only the host or cohost can create a poll.', [], 403);
     }
 
-    // Fetch event start datetime
     $event = Event::find($data['event_id']);
     $eventStart = Carbon::parse($event->date . ' ' . $event->start_time);
 
-    // Poll date validation
     if (!empty($data['poll_date'])) {
         $pollDate = Carbon::parse($data['poll_date']);
 
-        // Poll date must not be after event date (same day allowed)
+
         if ($pollDate->startOfDay()->gt($eventStart->copy()->startOfDay())) {
             return $this->sendError("Poll date must not be after the event date.", [], 422);
         }
 
-        // Agar poll_date valid hai → end time = 23:59:00
         $pollEndTime = "23:59:00";
     } else {
         $pollEndTime = "00:00:00";
     }
 
-    // Check for duplicate options
+
     $lowercaseOptions = array_map('strtolower', $data['options']);
     if (count($lowercaseOptions) !== count(array_unique($lowercaseOptions))) {
         return $this->sendError('Duplicate options are not allowed in a poll', [], 422);
     }
 
-    // Create the poll
+
     $poll = Poll::create([
         'event_id' => $data['event_id'],
         'created_by' => $user->id,
         'question' => $data['question'],
         'poll_date' => $data['poll_date'] ?? null,
-        'poll_end_time' => $pollEndTime, // ✅ Auto set
+        'poll_end_time' => $pollEndTime,
         'allow_member_add_option' => $data['allow_member_add_option'] ?? false,
         'allow_multiple_selection' => $data['allow_multiple_selection'] ?? false,
         'status' => 'active',
     ]);
 
-     $onlymembers = EventMember::where('event_id',$event->id)
-            ->where('status', 'joined')
-        ->whereNotIn('role', ['host','cohost'])->get();
-        foreach($onlymembers as $om)
-        {
-            Notification::create([
-            'user_id' => auth()->id(), // jisne event create kiya
-            'receiver_id' => $om->user_id, // jisko notification milegi
-            'title' => 'Manual poll added Successfully',
-            'message' => "{$user->first_name} {$user->last_name} has just created a poll in the event {$event->title}",
-            'data'=>[
-                'poll_id'=>$poll->id,
-                'event_id'=>$poll->event_id
+
+    $members = EventMember::where('event_id', $event->id)
+        ->where('status', 'joined')
+        ->whereNotIn('role', ['host', 'cohost'])
+        ->pluck('user_id');
+
+    foreach ($members as $receiverId) {
+        Notification::create([
+            'user_id' => $user->id, 
+            'receiver_id' => $receiverId, 
+            'title' => 'New Poll Created',
+            'message' => "{$user->first_name} {$user->last_name} created a new poll in the event '{$event->title}'",
+            'data' => [
+                'poll_id' => $poll->id,
+                'event_id' => $event->id,
+                'question' => $poll->question,
             ],
-            'type'=>'poll'
+            'type' => 'poll',
         ]);
-        }
+    }
 
-
-    // Add poll options
     foreach ($data['options'] as $option) {
-        $exists = PollOption::where('poll_id', $poll->id)
-            ->whereRaw('LOWER(option_text) = ?', [strtolower($option)])
-            ->exists();
-
-        if ($exists) continue;
-
         PollOption::create([
             'poll_id' => $poll->id,
             'option_text' => $option,
@@ -626,9 +617,9 @@ public function createPoll(Request $request)
         ]);
     }
 
-    // Return response with poll and options
     return $this->sendResponse('Poll created successfully', $poll->load('options'));
 }
+
 
 
 // public function createPoll(Request $request)

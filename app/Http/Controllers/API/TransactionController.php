@@ -278,7 +278,7 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
             'user_id' => auth()->id(),
             'receiver_id' => $receiverId, // jisko notification milegi
             'title' => 'Coins Added Successfully',
-            'message' => "{$user->first_name} {$user->last_name} has just send you {$coins} coins",
+            'message' => "{$user->first_name} {$user->last_name} has sent you {$coins} coins",
             'data' => [
                 'event_id'=>$eventId,
                 'post_id' => $post->id
