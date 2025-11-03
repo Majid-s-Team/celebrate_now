@@ -386,7 +386,8 @@ $existingUser = User::withTrashed()->where('email', $request->email)->first();
       public function viewBlockList(){
         $user = auth()->user();
         $userBlocks = UserBlock::with('blocked:id,first_name,last_name,profile_image')
-        ->where('blocker_id',$user->id)->get();
+        ->where('blocker_id',$user->id)
+        ->where('is_active', 1)->get();
 
         return $this->sendResponse('User Blocked List', $userBlocks, 200);
     }
