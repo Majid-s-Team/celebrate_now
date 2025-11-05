@@ -14,6 +14,8 @@ use App\Models\Notification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Carbon\Carbon;
+use App\Traits\ExcludeBlockedUsersScope;
+
 
 class TransactionController extends Controller
 {
@@ -178,11 +180,13 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
         $eventId = $data['event_id'] ?? null;
         $postId = $data['post_id'] ?? null;
         $contributionType = null;
-
         if (!empty($postId)) {
+
             $post = Post::findOrFail($postId);
+
             $receiverId = $post->user_id;
             $contributionType = 'donation';
+
         } elseif (!empty($eventId)) {
             $event = Event::findOrFail($eventId);
             $receiverId = $event->created_by;
@@ -277,7 +281,7 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
           Notification::create([
             'user_id' => auth()->id(),
             'receiver_id' => $receiverId, // jisko notification milegi
-            'title' => 'Coins Added Successfully',
+            'title' => 'Coins Received',
             'message' => "{$user->first_name} {$user->last_name} has sent you {$coins} coins",
             'data' => [
                 'event_id'=>$eventId,
@@ -425,58 +429,84 @@ if (!$request->has('coins') || (int)$request->coins < 1) {
 }
 
 
+public function gifts(Request $request)
+{
+    try {
+        $user = auth()->user();
 
+        $type = $request->query('type', 'sent');
+        $postId = $request->query('post_id');
 
-    public function gifts(Request $request)
-    {
-        try {
-            $user = auth()->user();
+        // Base query
+        $query = CoinTransaction::query()
+            ->whereNotNull('post_id')
+            ->with(['post:id,caption,user_id']);
 
-            $type = $request->query('type', 'sent');
-            $postId = $request->query('post_id');
+        // Filters
+        if ($type === 'sent') {
+            $query->where('sender_id', $user->id)->where('type', 'send');
+        } elseif ($type === 'received') {
+            $query->where('receiver_id', $user->id)->where('type', 'receive');
+        }
 
-            $query = CoinTransaction::with(['sender:id,first_name,last_name', 'receiver:id,first_name,last_name', 'post:id,caption,user_id'])
-                ->whereNotNull('post_id');
+        if (!empty($postId)) {
+            $query->where('post_id', $postId);
+        }
 
-            if ($type === 'sent') {
-                $query->where('sender_id', $user->id)->where('type', 'send');
-            } elseif ($type === 'received') {
-                $query->where('receiver_id', $user->id)->where('type', 'receive');
-            }
+        // Get transactions
+        $transactions = $query->orderBy('id', 'desc')->get();
 
-            if (!empty($postId)) {
-                $query->where('post_id', $postId);
-            }
+        // Collect sender and receiver IDs
+        $senderIds = $transactions->pluck('sender_id')->filter()->unique()->values();
+        $receiverIds = $transactions->pluck('receiver_id')->filter()->unique()->values();
 
-            $transactions = $query->orderBy('id', 'desc')->get();
+        // Fetch users directly via DB (bypass all model scopes)
+        $senders = \DB::table('users')
+            ->whereIn('id', $senderIds)
+            ->select('id', 'first_name', 'last_name')
+            ->get()
+            ->keyBy('id');
 
-            $response = $transactions->map(function ($tx) use ($type) {
-                return [
-                    'transaction_id' => $tx->id,
-                    'post_id' => $tx->post_id,
-                    'post_title' => $tx->post->caption ?? null,
-                    'coins' => $tx->coins,
-                    'message' => $tx->message,
-                    'contribution_type' => $tx->contribution_type,
-                    'sender' => $tx->sender ? [
-                    'id' => $tx->sender->id,
-                    'name' => trim(($tx->sender->first_name ?? '') . ' ' . ($tx->sender->last_name ?? '')),
+        $receivers = \DB::table('users')
+            ->whereIn('id', $receiverIds)
+            ->select('id', 'first_name', 'last_name')
+            ->get()
+            ->keyBy('id');
+
+        // Map response
+        $response = $transactions->map(function ($tx) use ($senders, $receivers) {
+            $sender = $senders->get($tx->sender_id);
+            $receiver = $receivers->get($tx->receiver_id);
+
+            return [
+                'transaction_id' => $tx->id,
+                'post_id' => $tx->post_id,
+                'post_title' => $tx->post->caption ?? null,
+                'coins' => $tx->coins,
+                'message' => $tx->message,
+                'contribution_type' => $tx->contribution_type,
+                'sender' => $sender ? [
+                    'id' => $sender->id,
+                    'name' => trim(($sender->first_name ?? '') . ' ' . ($sender->last_name ?? '')),
                 ] : null,
-                'receiver' => $tx->receiver ? [
-                    'id' => $tx->receiver->id,
-                    'name' => trim(($tx->receiver->first_name ?? '') . ' ' . ($tx->receiver->last_name ?? '')),
+                'receiver' => $receiver ? [
+                    'id' => $receiver->id,
+                    'name' => trim(($receiver->first_name ?? '') . ' ' . ($receiver->last_name ?? '')),
                 ] : null,
                 'type' => $tx->type,
                 'created_at' => $tx->created_at?->toDateTimeString(),
             ];
-            });
+        });
 
-            return $this->sendResponse("Gifts {$type} ", $response);
+        return $this->sendResponse("Gifts {$type}", $response);
 
-        } catch (\Exception $e) {
-            return $this->sendError('Failed to fetch gifts', ['error' => $e->getMessage()], 500);
-        }
+    } catch (\Exception $e) {
+        return $this->sendError('Failed to fetch gifts', ['error' => $e->getMessage()], 500);
     }
+}
+
+
+
 
 
 

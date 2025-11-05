@@ -19,82 +19,91 @@ trait ExcludeBlockedUsersScope
             $table = $model->getTable();
 
             if ($table === 'users') {
-                // For users table exclude both (you blocked them) and (they blocked you)
+                // Exclude both directions for users
                 $builder->whereNotIn('id', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('id', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 });
             }
 
             elseif ($table === 'events') {
-                // For events table use created_by and handle both directions
                 $builder->whereNotIn('created_by', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('created_by', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 });
             }
 
             elseif ($table === 'polls') {
-                // For events table use created_by and handle both directions
                 $builder->whereNotIn('created_by', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('created_by', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 });
             }
 
             elseif ($table === 'follows') {
-                // For follows table, check both follower_id and following_id
                 $builder->whereNotIn('follower_id', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('follower_id', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('following_id', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('following_id', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 });
             }
 
             else {
-                // For other tables use user_id and handle both directions
+                // Default: use user_id
                 $builder->whereNotIn('user_id', function ($query) use ($authId) {
                     $query->select('blocked_id')
                         ->from('user_blocks')
-                        ->where('blocker_id', $authId);
+                        ->where('blocker_id', $authId)
+                        ->where('is_active', 1);
                 })
                 ->whereNotIn('user_id', function ($query) use ($authId) {
                     $query->select('blocker_id')
                         ->from('user_blocks')
-                        ->where('blocked_id', $authId);
+                        ->where('blocked_id', $authId)
+                        ->where('is_active', 1);
                 });
             }
         });
