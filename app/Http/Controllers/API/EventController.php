@@ -1036,7 +1036,7 @@ public function update(Request $request, $id)
                         'user_id' => auth()->id(),
                         'receiver_id' => $m->user_id,
                         'title' => 'Autopoll Created',
-                        'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and youâ€™ve been included as one of the options.",
+                        'message' => "{$user->first_name} {$user->last_name} created a poll in the event {$event->title}, and you have been included as one of the options.",
                         'data' => [
                             'event_id' => $event->id,
                             'poll_id' => $poll->id

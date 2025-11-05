@@ -37,6 +37,7 @@ class FollowController extends Controller
         // If not, return an error response
         $user=auth()->user();
         if (!User::find($id)) {
+
             return $this->sendError('User not found', [], 404);
         }
         if (auth()->id() == $id) {
