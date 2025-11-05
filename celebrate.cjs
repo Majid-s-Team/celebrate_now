@@ -12,9 +12,11 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: "*" } });
 
 const LARAVEL_API_URL = "https://celebratenow.retrocubedev.com";
+// const LARAVEL_API_URL = "http://127.0.0.1:8000";
 
-let onlineUsers = new Map(); // user_id -> socket
-let activeChats = new Map(); // user_id -> Set<with_user_id>
+let onlineUsers = new Map();
+let activeChats = new Map();
+let registeredUsers = new Set();
 
 // ------------------ Helpers ------------------
 const setActiveChat = (user_id, with_user_id) => {
@@ -28,9 +30,6 @@ const closeChat = (user_id, with_user_id) => {
     if (activeChats.get(user_id).size === 0) activeChats.delete(user_id);
   }
 };
-
-const dumpOnline = () =>
-  [...onlineUsers.entries()].map(([id, s]) => ({ id, socketId: s?.id, connected: !!s?.connected }));
 
 // ------------------ SOCKET CONNECTION ------------------
 io.on("connection", (socket) => {
@@ -61,6 +60,7 @@ io.on("connection", (socket) => {
 
     socket.userId = user_id;
     onlineUsers.set(user_id, socket);
+    registeredUsers.add(user_id);
     console.log(`User ${user_id} registered → socket ${socket.id}`);
     socket.emit("registered", { user_id });
 
@@ -80,8 +80,6 @@ io.on("connection", (socket) => {
   socket.on("get_chat_history", async (rawData) => {
     const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
     const { user_id, with_user_id } = data || {};
-
-    console.log("get_chat_history called by:", user_id, "with", with_user_id);
     if (!user_id || !with_user_id) return;
 
     try {
@@ -90,51 +88,34 @@ io.on("connection", (socket) => {
       );
       const chatHistory = res.data?.data || [];
       socket.emit("chat_history", chatHistory);
-      console.log(`Sent chat history (${chatHistory.length}) to user ${user_id}`);
 
-      // Find unseen messages where current user is receiver
       const unseen = chatHistory.filter(
         (m) => m.receiver_id === user_id && m.status !== "read"
       );
       const unseenIds = unseen.map((m) => m.id);
-      console.log(`Unseen for ${user_id}:`, unseenIds);
 
       if (unseenIds.length) {
         await axios.post(`${LARAVEL_API_URL}/api/socket/messages/seen`, {
           message_ids: unseenIds,
         });
-        console.log(`Marked as read in Laravel:`, unseenIds);
 
         const updated = unseen.map((m) => ({
           id: m.id,
           status: "read",
           sender_id: m.sender_id,
           receiver_id: m.receiver_id,
-          message : m.message,
+          message: m.message,
         }));
 
-        // Emit locally to receiver
         socket.emit("status_update", updated);
-        console.log(`status_update → receiver ${user_id}`);
-
-        // Emit to sender real-time (most important part)
         const uniqueSenders = [...new Set(unseen.map((m) => m.sender_id))];
         for (const senderId of uniqueSenders) {
           const senderSocket = onlineUsers.get(senderId);
-          if (senderSocket && senderSocket.connected) {
-            senderSocket.emit("status_update", updated.filter((u) => u.sender_id === senderId));
-            console.log(`Real-time status_update → sender ${senderId}`);
-          } else {
-            console.log(`Sender ${senderId} offline (status_update skipped)`);
-          }
+          if (senderSocket) senderSocket.emit("status_update", updated);
         }
-      } else {
-        console.log(`No unseen messages for ${user_id}`);
       }
 
-      // mark active
       setActiveChat(user_id, with_user_id);
-      console.log(`Active chat set: ${user_id} ↔ ${with_user_id}`);
     } catch (err) {
       console.log("get_chat_history error:", err.message);
     }
@@ -157,27 +138,30 @@ io.on("connection", (socket) => {
       const receiverSocket = onlineUsers.get(receiver_id);
       const receiverActive = activeChats.get(receiver_id);
 
-
+      // --- Determine message status ---
       if (receiverActive && receiverActive.has(sender_id)) {
+        // Chat open → mark as read
         saved.status = "read";
         await axios.post(`${LARAVEL_API_URL}/api/socket/messages/seen`, {
           message_ids: [saved.id],
         });
-
-        const statusPayload = [{ id: saved.id, status: "read", sender_id, receiver_id }];
-        socket.emit("status_update", statusPayload);
-        if (receiverSocket) receiverSocket.emit("status_update", statusPayload);
+      } else if (registeredUsers.has(receiver_id)) {
+        // User registered → delivered
+        saved.status = "delivered";
+        await axios.post(`${LARAVEL_API_URL}/api/socket/messages/delivered`, {
+          message_ids: [saved.id],
+        });
       } else {
+        // Offline → sent
         saved.status = "sent";
       }
 
-      if (receiverSocket) {
-        receiverSocket.emit("receive_message", saved);
-        console.log(`Delivered message to ${receiver_id}`);
-      }
+      const statusPayload = [{ id: saved.id, status: saved.status, sender_id, receiver_id }];
+      socket.emit("status_update", statusPayload);
+      if (receiverSocket) receiverSocket.emit("status_update", statusPayload);
 
+      if (receiverSocket) receiverSocket.emit("receive_message", saved);
       socket.emit("message_sent", saved);
-      console.log(`message_sent ack to ${sender_id}`);
     } catch (err) {
       console.log("send_message error:", err.message);
     }
@@ -188,7 +172,6 @@ io.on("connection", (socket) => {
     const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
     const { user_id, with_user_id } = data || {};
     closeChat(user_id, with_user_id);
-    console.log(`Chat closed: ${user_id} ↔ ${with_user_id}`);
   });
 
   // ------------------ DISCONNECT ------------------
@@ -196,6 +179,7 @@ io.on("connection", (socket) => {
     if (socket.userId && onlineUsers.get(socket.userId)?.id === socket.id) {
       onlineUsers.delete(socket.userId);
       activeChats.delete(socket.userId);
+      registeredUsers.delete(socket.userId);
       console.log(`User ${socket.userId} disconnected`);
     }
   });
