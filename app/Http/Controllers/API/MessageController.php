@@ -89,7 +89,7 @@ public function chatHistory($user1, $user2)
     // 🔹 Apply logic for visibility
     $filtered = $messages->filter(function ($msg) use ($user1, $user2, $blocks) {
 
-        // Case 1️⃣: Message hidden for receiver
+        // Case 1️: Message hidden for receiver
         if ($msg->hidden_for_receiver && $msg->receiver_id == $user1) {
             return false;
         }
@@ -98,7 +98,7 @@ public function chatHistory($user1, $user2)
         $activeBlock = $blocks->where('is_active', true)->first();
         $lastBlock = $blocks->sortByDesc('blocked_at')->first();
 
-        // Case 2️⃣: If current user is blocker (user1 blocked user2)
+        // Case 2️: If current user is blocker (user1 blocked user2)
         if ($activeBlock && $activeBlock->blocker_id == $user1) {
             // Blocker cannot see any chat (even old ones) after block
             if ($msg->sender_id == $user2 && $msg->created_at > $activeBlock->blocked_at) {
@@ -106,7 +106,7 @@ public function chatHistory($user1, $user2)
             }
         }
 
-        // Case 3️⃣: After unblock, hide all messages sent during block period
+        // Case 3️: After unblock, hide all messages sent during block period
         if ($lastBlock && $lastBlock->blocker_id == $user1) {
             // hide messages from blocked user that were created during block period
             if (
@@ -145,9 +145,6 @@ public function chatHistory($user1, $user2)
 }
 
 
-
-
-
     /**
      * Unseen messages
      */
@@ -177,6 +174,21 @@ public function chatHistory($user1, $user2)
 
         Message::whereIn('id', $request->message_ids)->update(['status' => 'read']);
         return $this->apiResponse('Messages marked as read');
+    }
+
+
+      /**
+     * Mark as delivered
+     */
+    public function markDelivered(Request $request)
+    {
+        $request->validate([
+            'message_ids' => 'required|array',
+            'message_ids.*' => 'exists:messages,id',
+        ]);
+
+        Message::whereIn('id', $request->message_ids)->update(['status' => 'delivered']);
+        return $this->apiResponse('Messages marked as delivered');
     }
 
     /**
@@ -222,7 +234,7 @@ public function chatHistory($user1, $user2)
                 ->where('hidden_for_receiver', false)
                 ->count();
 
-            // 🔹 Check if current user has blocked this user
+            // Check if current user has blocked this user
             $isBlocked = $blockedUsers->contains($chat->chat_with_id);
 
             return [

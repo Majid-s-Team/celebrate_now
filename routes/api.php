@@ -178,7 +178,10 @@ Route::prefix('socket/messages')->group(function () {
     Route::post('/', [MessageController::class, 'socketStore']);
     Route::get('/history/{user1}/{user2}', [MessageController::class, 'chatHistory']);
     Route::get('/unseen/{user_id}', [MessageController::class, 'unseenMessages']);
-    Route::post('/seen', [MessageController::class, 'markSeen']);
+    Route::post('/seen', action: [MessageController::class, 'markSeen']);
+    Route::post('/delivered', action: [MessageController::class, 'markDelivered']);
+
+
     Route::get('inbox/{user_id}', [MessageController::class, 'inbox']);
     Route::post('/upload', [MessageController::class, 'uploadMedia']);
 });
