@@ -332,18 +332,18 @@ console.log(`${LARAVEL_API_URL}/api/groups/message`);
   socket.on("get_group_history", async (rawData) => {
     try {
       const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-      const { group_id, user_id } = data;
+      const { group_id, receiver_id } = data;
 
-      if (!group_id || !user_id) {
-        socket.emit("error", { message: "group_id and user_id are required" });
+      if (!group_id || !receiver_id) {
+        socket.emit("error", { message: "group_id and receiver_id are required" });
         return;
       }
 
-      const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
+      const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${receiver_id}`);
       const messages = res.data.data;
       socket.emit("group_history", messages);
 
-      console.log(`Sent group history for group ${group_id} to user ${user_id}`);
+      console.log(`Sent group history for group ${group_id} to user ${receiver_id}`);
     } catch (err) {
       console.error("get_group_history error:", err.message);
       socket.emit("error", { message: "Failed to fetch group history" });
