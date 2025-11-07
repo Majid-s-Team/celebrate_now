@@ -283,35 +283,50 @@ public function updateGroup(Request $request, $groupId)
 
         return $this->apiResponse('Members fetched', $members);
     }
-    public function userGroups($userId)
-    {
-        $groups = Group::whereHas('members', function ($q) use ($userId) {
-                $q->where('user_id', $userId);
-            })
-            ->with([
-                'members.user:id,first_name,last_name,profile_image',
-                'lastMessage.sender:id,first_name,last_name,profile_image'
-            ])
-            ->get()
-            ->map(function ($group) {
-                return [
+ public function userGroups($userId)
+{
+    $groups = Group::whereHas('members', function ($q) use ($userId) {
+            $q->where('user_id', $userId);
+        })
+        ->with([
+            'members.user:id,first_name,last_name,profile_image',
+            'lastMessage.sender:id,first_name,last_name,profile_image',
+            'creator:id,first_name,last_name,profile_image'
+        ])
+        ->get()
+        ->map(function ($group) {
+            $lastMessage = $group->lastMessage;
+
+            return [
+                'chat_with' => [
                     'id' => $group->id,
-                    'name' => $group->name,
+                    'group_name' => $group->name,
                     'description' => $group->description,
-                    'group_image' => $group->profile_image,
-                    'created_by' => $group->created_by,
-                    'last_message' => $group->lastMessage ? [
-                        'message' => $group->lastMessage->message,
-                        'message_type' => $group->lastMessage->message_type,
-                        'sender' => $group->lastMessage->sender,
-                        'created_at' => $group->lastMessage->created_at->format('Y-m-d H:i:s'),
+                    'group_image' => $group->profile_image
+                        ? asset('storage/' . $group->profile_image)
+                        : null,
+                    'created_by' => $group->creator ? [
+                        'id' => $group->creator->id,
+                        'first_name' => $group->creator->first_name,
+                        'last_name' => $group->creator->last_name,
+                        'profile_image' => $group->creator->profile_image
+                            ? asset('storage/' . $group->creator->profile_image)
+                            : null,
                     ] : null,
                     'members_count' => $group->members->count(),
-                ];
-            });
+                ],
 
-        return $this->apiResponse('User groups fetched', $groups);
-    }
+                'last_message' => $lastMessage?->message ?? '',
+                'media_url' => $lastMessage?->media_url ?? '',
+                'message_type' => $lastMessage?->message_type ?? 'text',
+                'created_at' => $lastMessage
+                    ? $lastMessage->created_at
+                    : $group->created_at,
+            ];
+        });
+
+    return $this->apiResponse('User groups fetched', $groups);
+}
 
 
      public function markGroupAsRead(Request $request)
@@ -339,5 +354,101 @@ public function updateGroup(Request $request, $groupId)
             'updated_rows' => $updated
         ]);
     }
+
+  public function groupChatMedia($groupId)
+{
+
+    // Get all non-text media messages for this group
+    $mediaMessages = GroupMessage::where('group_id', $groupId)
+        ->where('message_type', '!=', 'text')
+        ->where('message_type', '!=', 'system')
+        ->orderBy('created_at', 'desc')
+        ->get([
+            'id',
+            'group_id',
+            'sender_id',
+            'message_type',
+            'media_url',
+            'created_at'
+        ]);
+
+    return $this->apiResponse('Group media loaded successfully', $mediaMessages);
+}
+public function leaveGroup(Request $request, $groupId)
+{
+    $validator = Validator::make($request->all(), [
+        'user_id' => 'required|exists:users,id',
+    ]);
+
+    if ($validator->fails()) {
+        return $this->apiResponse('Validation failed', $validator->errors(), 422);
+    }
+
+    $group = Group::find($groupId);
+
+    if (!$group) {
+        return $this->apiResponse('Group not found', null, 404);
+    }
+
+    $user = User::find($request->user_id);
+
+    // Check if user is a member
+    $member = GroupMember::where('group_id', $groupId)
+        ->where('user_id', $request->user_id)
+        ->first();
+
+    if (!$member) {
+        return $this->apiResponse('User is not a member of this group', null, 403);
+    }
+
+    // Remove member
+    $member->delete();
+
+    // Check remaining members
+    $remainingMembers = GroupMember::where('group_id', $groupId)->pluck('user_id')->toArray();
+
+    // If creator left
+    if ($group->created_by == $request->user_id) {
+        if (count($remainingMembers) > 0) {
+            // Assign new creator — the earliest joined member
+            $newCreatorId = GroupMember::where('group_id', $groupId)
+                ->orderBy('created_at', 'asc')
+                ->value('user_id');
+
+            $group->update(['created_by' => $newCreatorId]);
+
+            // System message for creator change
+            GroupMessage::create([
+                'group_id' => $groupId,
+                'sender_id' => $newCreatorId,
+                'message' => "{$user->first_name} left the group. {$group->name}'s new admin is " . User::find($newCreatorId)->first_name . ".",
+                'message_type' => 'system'
+            ]);
+        } else {
+            // No members left — just system message
+            GroupMessage::create([
+                'group_id' => $groupId,
+                'sender_id' => $request->user_id,
+                'message' => "{$user->first_name} left the group. No members remaining.",
+                'message_type' => 'system'
+            ]);
+        }
+    } else {
+        // Normal member leave message
+        GroupMessage::create([
+            'group_id' => $groupId,
+            'sender_id' => $request->user_id,
+            'message' => "{$user->first_name} left the group.",
+            'message_type' => 'system'
+        ]);
+    }
+
+    return $this->apiResponse('User left the group successfully', [
+        'group_id' => $groupId,
+        'left_user' => $user->only(['id', 'first_name', 'last_name']),
+        'remaining_members' => count($remainingMembers)
+    ]);
+}
+
 
 }
