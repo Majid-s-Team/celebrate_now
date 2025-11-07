@@ -65,14 +65,26 @@ io.on("connection", (socket) => {
     socket.emit("registered", { user_id });
 
     try {
+      // Fetch unseen messages
       const unseen = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/unseen/${user_id}`);
       if (unseen.data?.data?.length)
         socket.emit("receive_message", unseen.data.data);
-      const inbox = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/inbox/${user_id}`);
-      if (inbox.data?.data?.length)
-        socket.emit("inbox_list", inbox.data.data);
+
+      // Fetch inbox (normal chats)
+      const inboxRes = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/inbox/${user_id}`);
+      const inboxData = inboxRes.data?.data?.map(item => ({ ...item, is_group: false })) || [];
+
+      // Fetch group list
+      const groupRes = await axios.get(`${LARAVEL_API_URL}/api/groups/user/${user_id}`);
+      const groupData = groupRes.data?.data?.map(g => ({ ...g, is_group: true })) || [];
+
+      // ✅ Merge both and send single inbox_list
+      const combinedInbox = [...inboxData, ...groupData];
+      if (combinedInbox.length) socket.emit("inbox_list", combinedInbox);
+
+      console.log(` Sent inbox + group list to ${user_id}`);
     } catch (err) {
-      console.log("Failed to fetch unseen/inbox:", err.message);
+      console.log("Failed to fetch unseen/inbox/group_list:", err.message);
     }
   });
 
@@ -138,21 +150,17 @@ io.on("connection", (socket) => {
       const receiverSocket = onlineUsers.get(receiver_id);
       const receiverActive = activeChats.get(receiver_id);
 
-      // --- Determine message status ---
       if (receiverActive && receiverActive.has(sender_id)) {
-        // Chat open → mark as read
         saved.status = "read";
         await axios.post(`${LARAVEL_API_URL}/api/socket/messages/seen`, {
           message_ids: [saved.id],
         });
       } else if (registeredUsers.has(receiver_id)) {
-        // User registered → delivered
         saved.status = "delivered";
         await axios.post(`${LARAVEL_API_URL}/api/socket/messages/delivered`, {
           message_ids: [saved.id],
         });
       } else {
-        // Offline → sent
         saved.status = "sent";
       }
 
@@ -181,7 +189,7 @@ io.on("connection", (socket) => {
   socket.on("create_group", async (rawData) => {
     try {
       const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-      const { name, created_by,description, members = [] } = data;
+      const { name,profile_image, created_by, description, members = [] } = data;
 
       if (!name || !created_by) {
         socket.emit("error", { message: "Both name and created_by are required" });
@@ -190,6 +198,7 @@ io.on("connection", (socket) => {
 
       const res = await axios.post(`${LARAVEL_API_URL}/api/groups/create`, {
         name,
+        profile_image,
         created_by,
         description,
         members,
@@ -248,7 +257,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ✅ UPDATE GROUP EVENT (added safely)
+  // ✅ UPDATE GROUP EVENT
   socket.on("update_group", async (rawData) => {
     try {
       const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
@@ -285,6 +294,7 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ✅ SEND GROUP MESSAGE EVENT
   socket.on("send_group_message", async (rawData) => {
     try {
       const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
@@ -303,9 +313,6 @@ io.on("connection", (socket) => {
         media_url,
       });
 
-console.log(`${LARAVEL_API_URL}/api/groups/message`);
-
-
       const msg = res.data.data;
       if (!msg) {
         socket.emit("error", { message: "Message not saved" });
@@ -322,6 +329,8 @@ console.log(`${LARAVEL_API_URL}/api/groups/message`);
         }
       }
 
+      // ✅ confirmation for sender
+      socket.emit("group_message_sent", msg);
       console.log(`Group ${group_id}: message sent by ${sender_id}`);
     } catch (err) {
       console.error("send_group_message error:", err.message);

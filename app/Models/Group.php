@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Group extends Model
 {
-    protected $fillable = ['name','description', 'created_by'];
+    protected $fillable = ['name','profile_image','description', 'created_by'];
 
     public function creator() {
         return $this->belongsTo(User::class, 'created_by');

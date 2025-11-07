@@ -19,6 +19,7 @@ class GroupChatController extends Controller
 {
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
+        'profile_image' => 'nullable|string|max:255',
         'description' => 'nullable|string|max:255',
         'created_by' => 'required|exists:users,id',
         'members' => 'nullable|array',
@@ -33,6 +34,7 @@ class GroupChatController extends Controller
     // Create group
     $group = Group::create([
         'name' => $request->name,
+        'profile_image' => $request->profile_image,
         'description' => $request->description,
         'created_by' => $request->created_by,
     ]);
