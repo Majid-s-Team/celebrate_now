@@ -42,6 +42,16 @@ Route::prefix('auth')->group(function () {
 
 
 Route::get('/groups/{groupId}/members', [GroupChatController::class, 'getMembers']);
+Route::post('/groups/{groupId}/add-member', [GroupChatController::class, 'addMember']);
+Route::post('groups/{groupId}/remove-member', [GroupChatController::class, 'removeMember']);
+Route::post('/groups/update/{groupId}', [GroupChatController::class, 'updateGroup']);
+Route::get('/groups/{groupId}/media', [GroupChatController::class, 'groupChatMedia']);
+Route::post('/groups/leave/{groupId}', [GroupChatController::class, 'leaveGroup']);
+
+
+
+
+
 
 
 
