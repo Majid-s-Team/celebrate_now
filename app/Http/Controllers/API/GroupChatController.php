@@ -297,6 +297,8 @@ public function updateGroup(Request $request, $groupId)
                 return [
                     'id' => $group->id,
                     'name' => $group->name,
+                    'description' => $group->description,
+                    'group_image' => $group->profile_image,
                     'created_by' => $group->created_by,
                     'last_message' => $group->lastMessage ? [
                         'message' => $group->lastMessage->message,
