@@ -171,5 +171,8 @@ ALTER TABLE `messages`
 ADD COLUMN `message_type` VARCHAR(255) NULL AFTER `message`;
 
 
+//php artisan make:migration create_group_message_status_table
+
+
 
 
