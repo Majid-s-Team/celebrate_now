@@ -254,27 +254,40 @@ public function updateGroup(Request $request, $groupId)
     /**
      * Fetch group chat history
      */
-    public function history($groupId, $userId)
-    {
-        $member = GroupMember::where('group_id', $groupId)
-            ->where('user_id', $userId)
+    public function history($groupId, $receiver_id)
+{
+    $member = GroupMember::where('group_id', $groupId)
+        ->where('user_id', $receiver_id)
+        ->first();
+
+    if (!$member) {
+        return $this->apiResponse('User is not a group member', null, 403);
+    }
+
+    $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
+        ->where('group_id', $groupId);
+
+    if (!$member->can_see_past_messages) {
+        $query->where('created_at', '>=', $member->created_at);
+    }
+
+    $messages = $query->orderBy('created_at')->get();
+
+    // DB se is_read leke attach karna
+    $messages->transform(function ($msg) use ($receiver_id) {
+        $status = GroupMessageStatus::where('group_id', $msg->group_id)
+            ->where('message_id', $msg->id)
+            ->where('receiver_id', $receiver_id)
             ->first();
 
-        if (!$member) {
-            return $this->apiResponse('User is not a group member', null, 403);
-        }
+        // sirf DB me jo value hai wahi use karo
+        $msg->is_read = $status ? $status->is_read : false;
+        return $msg;
+    });
 
-        $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
-            ->where('group_id', $groupId);
+    return $this->apiResponse('Chat loaded', $messages);
+}
 
-        if (!$member->can_see_past_messages) {
-            $query->where('created_at', '>=', $member->created_at);
-        }
-
-        $messages = $query->orderBy('created_at')->get();
-
-        return $this->apiResponse('Chat loaded', $messages);
-    }
     public function getMembers($groupId)
     {
         $members = GroupMember::where('group_id', $groupId)
@@ -302,9 +315,7 @@ public function updateGroup(Request $request, $groupId)
                     'id' => $group->id,
                     'group_name' => $group->name,
                     'description' => $group->description,
-                    'group_image' => $group->profile_image
-                        ? asset('storage/' . $group->profile_image)
-                        : null,
+                    'group_image' => $group->profile_image,
                     'created_by' => $group->creator ? [
                         'id' => $group->creator->id,
                         'first_name' => $group->creator->first_name,
@@ -333,7 +344,7 @@ public function updateGroup(Request $request, $groupId)
     {
         $validator = Validator::make($request->all(), [
             'receiver_id'  => 'required|exists:users,id',
-            'group_id' => 'required|exists:groups,id',
+            'group_id' => 'required|exists:groups,id'
         ]);
 
         if ($validator->fails()) {

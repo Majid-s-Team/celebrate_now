@@ -195,7 +195,7 @@ Route::post('/groups/create', [GroupChatController::class, 'create']);
 Route::post('/groups/{groupId}/add-member', [GroupChatController::class, 'addMember']);
 Route::post('groups/{groupId}/remove-member', [GroupChatController::class, 'removeMember']);
 Route::post('/groups/message', [GroupChatController::class, 'sendMessage']);
-Route::get('/groups/history/{groupId}/{userId}', [GroupChatController::class, 'history']);
+Route::get('/groups/history/{groupId}/{receiver_id}', [GroupChatController::class, 'history']);
 Route::get('/groups/user/{userId}', [GroupChatController::class, 'userGroups']);
 Route::post('/groups/update/{groupId}', [GroupChatController::class, 'updateGroup']);
 Route::get('/groups/{groupId}/members', [GroupChatController::class, 'getMembers']);
