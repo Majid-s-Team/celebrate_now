@@ -206,7 +206,7 @@ public function updateGroup(Request $request, $groupId)
     /**
      * Send message (only if user is a group member)
      */
-    public function sendMessage(Request $request)
+ public function sendMessage(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'group_id' => 'required|exists:groups,id',
@@ -220,7 +220,7 @@ public function updateGroup(Request $request, $groupId)
         return $this->apiResponse('Validation failed', $validator->errors(), 422);
     }
 
-    // Check sender is a group member
+    // --- Check sender is a group member ---
     $isMember = GroupMember::where('group_id', $request->group_id)
         ->where('user_id', $request->sender_id)
         ->exists();
@@ -229,52 +229,91 @@ public function updateGroup(Request $request, $groupId)
         return $this->apiResponse('User is not a group member', null, 403);
     }
 
-    // Send message
-    $msg = GroupMessage::create($request->all());
+    // --- Create message ---
+    $msg = GroupMessage::create($request->only([
+        'group_id', 'sender_id', 'message', 'message_type', 'media_url'
+    ]));
+
     $msg->load(['sender:id,first_name,last_name,profile_image']);
 
-    // Create status rows for all other group members
-    $members = GroupMember::where('group_id', $request->group_id)->get();
+    // --- Fetch all group members ---
+    $members = GroupMember::with('user:id,first_name,last_name,profile_image')
+        ->where('group_id', $request->group_id)
+        ->get();
+
+    $memberStatusList = [];
 
     foreach ($members as $member) {
-        if ($member->user_id != $request->sender_id) {
-            GroupMessageStatus::create([
-                'group_id' => $request->group_id,
-                'sender_id' => $request->sender_id,
-                'receiver_id' => $member->user_id,
-                'message_id' => $msg->id,
-                'is_read' => false,
-            ]);
+        $status = 'sent';
+
+        // DB me sab ka status create karo (sender bhi)
+        GroupMessageStatus::create([
+            'group_id' => $request->group_id,
+            'sender_id' => $request->sender_id,
+            'receiver_id' => $member->user_id,
+            'message_id' => $msg->id,
+            'status' => $status,
+        ]);
+
+        // Lekin response list me sender ko skip kar do
+        if ($member->user_id == $request->sender_id) {
+            continue;
         }
+
+        $memberStatusList[] = [
+            'user_id' => $member->user->id,
+            'first_name' => $member->user->first_name,
+            'last_name' => $member->user->last_name,
+            'profile_image' => $member->user->profile_image,
+            'status' => $status
+        ];
     }
 
-    return $this->apiResponse('Message sent', $msg);
+    // --- Final response with members list ---
+    $response = $msg->toArray();
+    $response['members'] = $memberStatusList;
+
+    return $this->apiResponse('Message sent', $response);
 }
+
 
     /**
      * Fetch group chat history
      */
-    public function history($groupId, $userId)
-    {
-        $member = GroupMember::where('group_id', $groupId)
-            ->where('user_id', $userId)
+    public function history($groupId, $receiver_id)
+{
+    $member = GroupMember::where('group_id', $groupId)
+        ->where('user_id', $receiver_id)
+        ->first();
+
+    if (!$member) {
+        return $this->apiResponse('User is not a group member', null, 403);
+    }
+
+    $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
+        ->where('group_id', $groupId);
+
+    if (!$member->can_see_past_messages) {
+        $query->where('created_at', '>=', $member->created_at);
+    }
+
+    $messages = $query->orderBy('created_at')->get();
+
+    // DB se is_read leke attach karna
+    $messages->transform(function ($msg) use ($receiver_id) {
+        $status = GroupMessageStatus::where('group_id', $msg->group_id)
+            ->where('message_id', $msg->id)
+            ->where('receiver_id', $receiver_id)
             ->first();
 
-        if (!$member) {
-            return $this->apiResponse('User is not a group member', null, 403);
-        }
+        // sirf DB me jo value hai wahi use karo
+$msg->status = $status ? $status->status : 'sent';
+        return $msg;
+    });
 
-        $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
-            ->where('group_id', $groupId);
+    return $this->apiResponse('Chat loaded', $messages);
+}
 
-        if (!$member->can_see_past_messages) {
-            $query->where('created_at', '>=', $member->created_at);
-        }
-
-        $messages = $query->orderBy('created_at')->get();
-
-        return $this->apiResponse('Chat loaded', $messages);
-    }
     public function getMembers($groupId)
     {
         $members = GroupMember::where('group_id', $groupId)
@@ -302,9 +341,7 @@ public function updateGroup(Request $request, $groupId)
                     'id' => $group->id,
                     'group_name' => $group->name,
                     'description' => $group->description,
-                    'group_image' => $group->profile_image
-                        ? asset('storage/' . $group->profile_image)
-                        : null,
+                    'group_image' => $group->profile_image,
                     'created_by' => $group->creator ? [
                         'id' => $group->creator->id,
                         'first_name' => $group->creator->first_name,
@@ -333,7 +370,7 @@ public function updateGroup(Request $request, $groupId)
     {
         $validator = Validator::make($request->all(), [
             'receiver_id'  => 'required|exists:users,id',
-            'group_id' => 'required|exists:groups,id',
+            'group_id' => 'required|exists:groups,id'
         ]);
 
         if ($validator->fails()) {
@@ -346,7 +383,7 @@ public function updateGroup(Request $request, $groupId)
         // Update all messages in that group for this user
         $updated = GroupMessageStatus::where('receiver_id', $userId)
                     ->where('group_id', $groupId)
-                    ->update(['is_read' => true]);
+                    ->update(['status' => 'seen']);
 
         return $this->apiResponse('Group messages marked as read', [
             'group_id' => $groupId,
@@ -354,6 +391,64 @@ public function updateGroup(Request $request, $groupId)
             'updated_rows' => $updated
         ]);
     }
+
+
+    public function markGroupAsDelivered(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'receiver_id'  => 'required|exists:users,id',
+    ]);
+
+    if ($validator->fails()) {
+        return $this->apiResponse('Validation failed', $validator->errors(), 422);
+    }
+
+    $userId = $request->receiver_id;
+
+    // Get all message IDs for this receiver
+    $messageIds = GroupMessageStatus::where('receiver_id', $userId)
+        ->pluck('message_id')
+        ->toArray();
+
+    // If no messages found, return early
+    if (empty($messageIds)) {
+        return $this->apiResponse('No pending messages to mark delivered', [
+            'receiver_id' => $userId,
+            'message_ids' => [],
+            'updated_rows' => 0
+        ]);
+    }
+
+    // Get group_id from first message (assuming all belong to one group)
+    $groupRecord = GroupMessageStatus::whereIn('message_id', $messageIds)->first();
+    $groupId = $groupRecord ? $groupRecord->group_id : null;
+
+    // Update status
+    $updatedRows = GroupMessageStatus::where('receiver_id', $userId)
+        ->update(['status' => 'delivered']);
+
+    return $this->apiResponse('Group messages marked as delivered', [
+        'receiver_id' => $userId,
+        'group_id' => $groupId,
+        'message_ids' => $messageIds,
+        'updated_rows' => $updatedRows
+    ]);
+}
+
+
+
+
+//     return response()->json([
+//     'data' => [
+//         'receiver_id' => $receiver_id,
+//         'updated_rows' => $updatedRows,
+//         'messages' => $messages->map(fn($m) => [
+//             'id' => $m->id,
+//             'group_id' => $m->group_id,
+//             'sender_id' => $m->sender_id,
+//         ])
+//     ]
+// ]);
 
   public function groupChatMedia($groupId)
 {

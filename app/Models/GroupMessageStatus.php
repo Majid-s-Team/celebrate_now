@@ -17,6 +17,7 @@ class GroupMessageStatus extends Model
         'receiver_id',
         'message_id',
         'is_read',
+        'status'
     ];
 
     /**
