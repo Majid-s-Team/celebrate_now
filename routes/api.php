@@ -200,6 +200,9 @@ Route::get('/groups/user/{userId}', [GroupChatController::class, 'userGroups']);
 Route::post('/groups/update/{groupId}', [GroupChatController::class, 'updateGroup']);
 Route::get('/groups/{groupId}/members', [GroupChatController::class, 'getMembers']);
 Route::post('/groups/message/seen', [GroupChatController::class, 'markGroupAsRead']);
+Route::post('/groups/message/delivered', [GroupChatController::class, 'markGroupAsDelivered']);
+
+
 
 
 
