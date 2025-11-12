@@ -247,7 +247,7 @@ public function updateGroup(Request $request, $groupId)
         $status = 'sent';
 
         // DB me sab ka status create karo (sender bhi)
-        GroupMessageStatus::create([
+        $statusRecord = GroupMessageStatus::create([
             'group_id' => $request->group_id,
             'sender_id' => $request->sender_id,
             'receiver_id' => $member->user_id,
@@ -255,7 +255,7 @@ public function updateGroup(Request $request, $groupId)
             'status' => $status,
         ]);
 
-        // Lekin response list me sender ko skip kar do
+        // Response list me sender ko skip kar do
         if ($member->user_id == $request->sender_id) {
             continue;
         }
@@ -265,6 +265,7 @@ public function updateGroup(Request $request, $groupId)
             'first_name' => $member->user->first_name,
             'last_name' => $member->user->last_name,
             'profile_image' => $member->user->profile_image,
+            'updated_at' => $statusRecord->updated_at,
             'status' => $status
         ];
     }
@@ -275,6 +276,8 @@ public function updateGroup(Request $request, $groupId)
 
     return $this->apiResponse('Message sent', $response);
 }
+
+
 
 
     /**
@@ -385,18 +388,23 @@ $msg->status = $status ? $status->status : 'sent';
                     ->where('group_id', $groupId)
                     ->update(['status' => 'seen']);
 
+        $updatedtime = GroupMessageStatus::where('receiver_id', $userId)
+                    ->where('group_id', $groupId)
+                    ->first();
+
         return $this->apiResponse('Group messages marked as read', [
             'group_id' => $groupId,
             'receiver_id' => $userId,
+            'updated_at' =>$updatedtime->updated_at,
             'updated_rows' => $updated
         ]);
     }
 
 
-    public function markGroupAsDelivered(Request $request)
+  public function markGroupAsDelivered(Request $request)
 {
     $validator = Validator::make($request->all(), [
-        'receiver_id'  => 'required|exists:users,id',
+        'receiver_id' => 'required|exists:users,id',
     ]);
 
     if ($validator->fails()) {
@@ -405,33 +413,45 @@ $msg->status = $status ? $status->status : 'sent';
 
     $userId = $request->receiver_id;
 
-    // Get all message IDs for this receiver
-    $messageIds = GroupMessageStatus::where('receiver_id', $userId)
+    // ✅ 1️⃣ Sirf un messages ko lo jinka status abhi "sent" hai
+    $pendingMessages = GroupMessageStatus::where('receiver_id', $userId)
+        ->where('status', 'sent')
         ->pluck('message_id')
         ->toArray();
 
-    // If no messages found, return early
-    if (empty($messageIds)) {
-        return $this->apiResponse('No pending messages to mark delivered', [
+    // 🚫 Agar koi pending message nahi mila to return karo
+    if (empty($pendingMessages)) {
+        return $this->apiResponse('No new messages to mark delivered', [
             'receiver_id' => $userId,
             'message_ids' => [],
-            'updated_rows' => 0
+            'updated_rows' => 0,
         ]);
     }
 
-    // Get group_id from first message (assuming all belong to one group)
-    $groupRecord = GroupMessageStatus::whereIn('message_id', $messageIds)->first();
+    // ✅ 2️⃣ Group ID nikal lo (first message se)
+    $groupRecord = GroupMessageStatus::whereIn('message_id', $pendingMessages)->first();
     $groupId = $groupRecord ? $groupRecord->group_id : null;
 
-    // Update status
+    // ✅ 3️⃣ Update only "sent" → "delivered"
     $updatedRows = GroupMessageStatus::where('receiver_id', $userId)
-        ->update(['status' => 'delivered']);
+        ->whereIn('message_id', $pendingMessages)
+        ->update([
+            'status' => 'delivered',
+            'updated_at' => now(),
+        ]);
+
+    // ✅ 4️⃣ Latest updated time le lo
+    $latest = GroupMessageStatus::where('receiver_id', $userId)
+        ->where('group_id', $groupId)
+        ->latest('updated_at')
+        ->first();
 
     return $this->apiResponse('Group messages marked as delivered', [
         'receiver_id' => $userId,
         'group_id' => $groupId,
-        'message_ids' => $messageIds,
-        'updated_rows' => $updatedRows
+        'updated_at' => optional($latest)->updated_at,
+        'message_ids' => $pendingMessages, // ✅ sirf wo jinke status change hue
+        'updated_rows' => $updatedRows,
     ]);
 }
 
