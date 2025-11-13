@@ -38,6 +38,8 @@ io.on("connection", (socket) => {
   console.log("[DEBUG] New WebSocket connection:", socket.id);
 
   // ------------------ REGISTER ------------------
+
+
 //   socket.on("register", async (rawData) => {
 //     const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
 //     const { user_id } = data || {};
@@ -147,6 +149,7 @@ socket.on("register", async (rawData) => {
         socket.emit("group_status_update", {
           group_id :  deliveredMessages.group_id || null,
           receiver_id: user_id,
+          updated_at:  deliveredMessages.updated_at || null,
           message_id,
           status: "delivered"
         });
@@ -160,6 +163,7 @@ socket.on("register", async (rawData) => {
             group_id: deliveredMessages.group_id || null,
             receiver_id: user_id,
             sender_id:sender_id,
+            updated_at:  deliveredMessages.updated_at || null,
             message_id,
             status: "delivered"
           });
@@ -453,6 +457,7 @@ socket.on("register", async (rawData) => {
 // });
 
 
+
 socket.on("send_group_message", async (rawData) => {
   try {
     const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
@@ -474,12 +479,11 @@ socket.on("send_group_message", async (rawData) => {
     const membersRes = await axios.get(`${LARAVEL_API_URL}/api/groups/${group_id}/members`);
     const members = membersRes.data.data;
 
-    // 3️⃣ Prepare members array with real-time status in parallel
+    // 3️⃣ Prepare members array with real-time status
     const updatedMembers = await Promise.all(
       members.map(async m => {
         let status = "sent";
 
-        // Mark as seen if group chat is active
         if (activeGroupChats.has(m.user_id) && activeGroupChats.get(m.user_id).has(group_id)) {
           status = "seen";
           await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
@@ -487,9 +491,7 @@ socket.on("send_group_message", async (rawData) => {
             group_id,
             message_ids: [msg.id],
           });
-        }
-        // Mark as delivered if user is registered and not active
-        else if (registeredUsers.has(m.user_id)) {
+        } else if (registeredUsers.has(m.user_id)) {
           status = "delivered";
           await axios.post(`${LARAVEL_API_URL}/api/groups/message/delivered`, {
             receiver_id: m.user_id,
@@ -498,66 +500,58 @@ socket.on("send_group_message", async (rawData) => {
           });
         }
 
-        // Emit message and status update if member is connected (existing logic)
         const memberSocket = onlineUsers.get(m.user_id);
         if (memberSocket) {
-          memberSocket.emit("receive_group_message", msg);
+          // ✅ ONLY CHANGE: Emit receive_message with is_group: true
+          memberSocket.emit("receive_message", { ...msg, is_group: true });
           memberSocket.emit("group_status_update", {
             group_id,
             receiver_id: m.user_id,
             message_id: msg.id,
+            updated_at: msg.updated_at || "",
             status,
           });
         }
 
-        console.log(`✅ group_status_update → user ${m.user_id} (${status})`);
-
         return {
           user_id: m.user_id,
-          first_name: m.first_name,
-          last_name: m.last_name,
-          profile_image: m.profile_image,
+          first_name: m.user.first_name || "",
+          last_name: m.user.last_name || "",
+          profile_image: m.user.profile_image || "",
+          updated_at: msg.updated_at || "",
           status
         };
       })
     );
 
-    // 4️⃣ Update msg.members with real-time status
     msg.members = updatedMembers;
 
-    // 5️⃣ Notify sender with updated members
     socket.emit("group_message_sent", msg);
 
-    // 6️⃣ --- BATCH status emit per receiver ---
     for (const m of updatedMembers) {
       const receiverSocket = onlineUsers.get(m.user_id);
       if (receiverSocket) {
-        // Collect all pending message IDs for this receiver (here just current msg.id, can expand)
-        const pendingMessageIds = [msg.id]; // replace with array if multiple pending
-        const status = m.status;
-
+        const pendingMessageIds = [msg.id];
         receiverSocket.emit("group_status_update", {
           group_id,
           receiver_id: m.user_id,
           sender_id,
+          updated_at: msg.updated_at || "",
           message_ids: pendingMessageIds,
-          status
+          status: m.status
         });
-
-        console.log(`[BATCH] group_status_update → user ${m.user_id} (${status})`);
       }
     }
 
-    // 7️⃣ Optionally, emit delivered status to sender if any member was delivered
     const anyDelivered = updatedMembers.some(m => m.status === "delivered" && m.user_id !== sender_id);
     if (anyDelivered) {
       socket.emit("group_status_update", {
         group_id,
         sender_id,
         message_ids: [msg.id],
+        updated_at: msg.updated_at || "",
         status: "delivered"
       });
-      console.log(`[DEBUG] Delivered status sent back to sender ${sender_id}`);
     }
 
   } catch (err) {
@@ -591,11 +585,16 @@ socket.on("get_group_history", async (rawData) => {
 
     if (unreadIds.length > 0) {
       // Mark messages as seen in backend
-      await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
+     const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
         receiver_id,
         group_id,
         message_ids: unreadIds,
       });
+
+      const mss = reso.data.data || [];
+
+      console.log("?????????????????????????????????????????????????");
+      console.log(mss);
 
       let status='seen';
 
@@ -603,6 +602,7 @@ socket.on("get_group_history", async (rawData) => {
       socket.emit("group_status_update", {
         group_id,
         receiver_id,
+        updated_at: mss.updated_at ,
         message_ids: unreadIds,
         status,
       });
@@ -618,6 +618,7 @@ socket.on("get_group_history", async (rawData) => {
             group_id,
             receiver_id,   // original receiver
             sender_id: senderId,
+            updated_at: mss.updated_at,
             message_ids: unreadIds,
             status,
           });
