@@ -15,4 +15,9 @@ class GroupMessage extends Model
     public function sender() {
         return $this->belongsTo(User::class, 'sender_id');
     }
+    public function statuses()
+{
+    return $this->hasMany(GroupMessageStatus::class, 'message_id');
+}
+
 }

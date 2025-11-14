@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus, User};
+use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus, User,UserBlock};
 use App\Traits\ApiResponseTrait;
 use Illuminate\Support\Facades\Validator;
 
@@ -230,7 +230,11 @@ public function updateGroup(Request $request, $groupId)
     }
 
     // --- Create message ---
-    $msg = GroupMessage::create($request->only([
+
+
+
+
+     $msg = GroupMessage::create($request->only([
         'group_id', 'sender_id', 'message', 'message_type', 'media_url'
     ]));
 
@@ -246,12 +250,18 @@ public function updateGroup(Request $request, $groupId)
     foreach ($members as $member) {
         $status = 'sent';
 
+        $isBlockedEitherWay =
+    UserBlock::isBlocked($member->user_id, $request->sender_id) ||
+    UserBlock::isBlocked($request->sender_id, $member->user_id);
+
+
         // DB me sab ka status create karo (sender bhi)
         $statusRecord = GroupMessageStatus::create([
             'group_id' => $request->group_id,
             'sender_id' => $request->sender_id,
             'receiver_id' => $member->user_id,
             'message_id' => $msg->id,
+            'hidden_for_receiver'=>$isBlockedEitherWay,
             'status' => $status,
         ]);
 
@@ -278,12 +288,117 @@ public function updateGroup(Request $request, $groupId)
 }
 
 
-
-
     /**
      * Fetch group chat history
      */
-    public function history($groupId, $receiver_id)
+//     public function history($groupId, $receiver_id)
+// {
+//     $member = GroupMember::where('group_id', $groupId)
+//         ->where('user_id', $receiver_id)
+//         ->first();
+
+//     if (!$member) {
+//         return $this->apiResponse('User is not a group member', null, 403);
+//     }
+
+//     $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
+//         ->where('group_id', $groupId);
+
+//     $sender_id = $query->sender_id;
+
+//     if (!$member->can_see_past_messages) {
+//         $query->where('created_at', '>=', $member->created_at);
+//     }
+
+//     $messages = $query->orderBy('created_at')->get();
+
+//     $messages->transform(function ($msg) use ($receiver_id) {
+//         $status = GroupMessageStatus::where('group_id', $msg->group_id)
+//             ->where('message_id', $msg->id)
+//             ->where('receiver_id', $receiver_id)
+//             ->first();
+
+
+
+
+//         // sirf DB me jo value hai wahi use karo
+// $msg->status = $status ? $status->status : 'sent';
+//         return $msg;
+
+//     });
+
+
+//        $blocks = UserBlock::where(function ($q) use ($sender_id, $receiver_id) {
+//             $q->where('blocker_id', $sender_id)->where('blocked_id', $receiver_id);
+//         })
+//         ->orWhere(function ($q) use ($receiver_id, $sender_id) {
+//             $q->where('blocker_id', $sender_id)->where('blocked_id', $receiver_id);
+//         })
+//         ->orderBy('blocked_at', 'asc')
+//         ->get();
+
+//     // 🔹 Apply logic for visibility
+//     $filtered = $messages->filter(function ($msg) use ($sender_id, $receiver_id, $blocks) {
+
+//         // Case 1️: Message hidden for receiver
+//         if ($msg->is_read && $msg->receiver_id == $receiver_id && $msg->sender_id == $sender_id) {
+//             return false;
+//         }
+
+//         // Get last block record (if exists)
+//         $activeBlock = $blocks->where('is_active', true)->first();
+//         $lastBlock = $blocks->sortByDesc('blocked_at')->first();
+
+//         // Case 2️: If current user is blocker (user1 blocked user2)
+//         if ($activeBlock && $activeBlock->blocker_id == $sender_id) {
+//             // Blocker cannot see any chat (even old ones) after block
+//             if ($msg->sender_id == $sender_id && $msg->created_at > $activeBlock->blocked_at) {
+//                 return false;  // Hide new messages from blocked user after blocking
+//             }
+//         }
+
+//         // Case 3️: After unblock, hide all messages sent during block period
+//         if ($lastBlock && $lastBlock->blocker_id == $sender_id) {
+//             // hide messages from blocked user that were created during block period
+//             if (
+//                 $msg->sender_id == $lastBlock->blocked_id &&
+//                 $msg->created_at > $lastBlock->blocked_at &&
+//                 ($lastBlock->unblocked_at == null || $msg->created_at < $lastBlock->unblocked_at)
+//             ) {
+//                 return false;
+//             }
+//         }
+
+//         // Otherwise visible
+//         return true;
+//     });
+
+//     // 🔹 Current block status
+//     $is_block = UserBlock::where('blocker_id', $sender_id)
+//         ->where('blocked_id', $receiver_id)
+//         ->where('is_active', true)
+//         ->exists();
+
+//     // 🔹 Check if user2 deleted
+//     $is_deleted = User::withTrashed()
+//         ->where('id', $receiver_id)
+//         ->whereNotNull('deleted_at')
+//         ->exists();
+
+//     // 🔹 Add meta
+//     $filtered->transform(function ($msg) use ($is_block, $is_deleted) {
+//         $msg->is_block = $is_block;
+//         $msg->is_deleted = $is_deleted;
+//         return $msg;
+//     });
+
+//     return $this->apiResponse('Chat loaded', $messages);
+// }
+
+
+
+
+public function history($groupId, $receiver_id)
 {
     $member = GroupMember::where('group_id', $groupId)
         ->where('user_id', $receiver_id)
@@ -293,8 +408,13 @@ public function updateGroup(Request $request, $groupId)
         return $this->apiResponse('User is not a group member', null, 403);
     }
 
-    $query = GroupMessage::with('sender:id,first_name,last_name,profile_image')
-        ->where('group_id', $groupId);
+    // 🔹 Get messages with sender & receiver status eager loaded
+    $query = GroupMessage::with([
+        'sender:id,first_name,last_name,profile_image',
+        'statuses' => function($q) use ($receiver_id) {
+            $q->where('receiver_id', $receiver_id);
+        }
+    ])->where('group_id', $groupId);
 
     if (!$member->can_see_past_messages) {
         $query->where('created_at', '>=', $member->created_at);
@@ -302,20 +422,85 @@ public function updateGroup(Request $request, $groupId)
 
     $messages = $query->orderBy('created_at')->get();
 
-    // DB se is_read leke attach karna
-    $messages->transform(function ($msg) use ($receiver_id) {
-        $status = GroupMessageStatus::where('group_id', $msg->group_id)
-            ->where('message_id', $msg->id)
-            ->where('receiver_id', $receiver_id)
-            ->first();
+    // 🔹 Fetch block records between receiver and any sender
+    $blocks = UserBlock::where(function ($q) use ($receiver_id) {
+            $q->where('blocker_id', $receiver_id)
+              ->orWhere('blocked_id', $receiver_id);
+        })
+        ->orderBy('blocked_at', 'asc')
+        ->get();
 
-        // sirf DB me jo value hai wahi use karo
-$msg->status = $status ? $status->status : 'sent';
+    // 🔹 Filter messages based on block/unblock periods + permanent hidden_for_receiver
+    $messages = $messages->filter(function ($msg) use ($receiver_id, $blocks) {
+
+        // 🚫 Check if message was marked hidden_for_receiver in status table
+        $statusCheck = $msg->statuses->first();
+
+        if ($statusCheck && $statusCheck->hidden_for_receiver) {
+            return false; // permanently hide, even after unblock
+        }
+
+        foreach ($blocks as $block) {
+            if (!$block->is_active) continue; // skip inactive blocks for new messages
+
+            $blockStart = $block->blocked_at;
+            $blockEnd = $block->unblocked_at;
+
+            // Case 1: Receiver blocked sender
+            if ($block->blocker_id == $receiver_id && $block->blocked_id == $msg->sender_id) {
+                if ($msg->created_at >= $blockStart && (!$blockEnd || $msg->created_at <= $blockEnd)) {
+                    return false;
+                }
+            }
+
+            // Case 2: Sender blocked receiver
+            if ($block->blocker_id == $msg->sender_id && $block->blocked_id == $receiver_id) {
+                if ($msg->created_at >= $blockStart && (!$blockEnd || $msg->created_at <= $blockEnd)) {
+                    return false;
+                }
+            }
+        }
+
+        return true; // show message
+    });
+
+    // 🔹 Add message status
+    $messages->transform(function ($msg) use ($receiver_id) {
+        $status = $msg->statuses->first();
+        $msg->status = $status ? $status->status : 'sent';
         return $msg;
     });
 
-    return $this->apiResponse('Chat loaded', $messages);
+    // 🔹 Current block status
+    $is_block = UserBlock::where('blocker_id', $receiver_id)
+        ->where('is_active', true)
+        ->exists();
+
+    // 🔹 Check if user deleted
+    $is_deleted = User::withTrashed()
+        ->where('id', $receiver_id)
+        ->whereNotNull('deleted_at')
+        ->exists();
+
+    // 🔹 Add meta
+    $messages->transform(function ($msg) use ($is_block, $is_deleted) {
+        $msg->is_block = $is_block;
+        $msg->is_deleted = $is_deleted;
+        return $msg;
+    });
+
+    // 🔹 Convert final collection to plain array
+    $messagesArray = $messages->toArray();
+
+    return $this->apiResponse('Chat loaded', $messagesArray);
 }
+
+
+
+
+
+
+
 
     public function getMembers($groupId)
     {
@@ -325,19 +510,58 @@ $msg->status = $status ? $status->status : 'sent';
 
         return $this->apiResponse('Members fetched', $members);
     }
- public function userGroups($userId)
+
+
+public function userGroups($userId)
 {
     $groups = Group::whereHas('members', function ($q) use ($userId) {
             $q->where('user_id', $userId);
         })
         ->with([
             'members.user:id,first_name,last_name,profile_image',
-            'lastMessage.sender:id,first_name,last_name,profile_image',
             'creator:id,first_name,last_name,profile_image'
         ])
         ->get()
-        ->map(function ($group) {
-            $lastMessage = $group->lastMessage;
+        ->sortByDesc(function ($group) use ($userId) {
+            // use latest visible message timestamp for sorting
+            $lastVisible = $group->messages()
+                ->whereHas('statuses', function($q) use ($userId) {
+                    $q->where('receiver_id', $userId)
+                      ->where('hidden_for_receiver', 0);
+                })
+                ->latest('created_at')
+                ->first();
+            return $lastVisible ? $lastVisible->created_at : $group->created_at;
+        })
+        ->values()
+        ->map(function ($group) use ($userId) {
+
+            // 🔹 latest visible message for inbox
+            $lastMessage = $group->messages()
+                ->whereHas('statuses', function($q) use ($userId) {
+                    $q->where('receiver_id', $userId)
+                      ->where('hidden_for_receiver', 0);
+                })
+                ->with('sender:id,first_name,last_name,profile_image')
+                ->latest('created_at')
+                ->first();
+
+            // 🔹 unread count excluding hidden messages
+            $unreadCount = GroupMessageStatus::where('receiver_id', $userId)
+                ->where('status', '!=', 'read')
+                ->where('hidden_for_receiver', 0)
+                ->whereHas('message', function ($q) use ($group) {
+                    $q->where('group_id', $group->id);
+                })
+                ->count();
+
+            // 🔹 is_block
+            $memberIds = $group->members->pluck('user_id')->filter(fn($id) => $id != $userId);
+            $isBlock = UserBlock::where(function($q) use ($userId, $memberIds) {
+                $q->where('blocker_id', $userId)->whereIn('blocked_id', $memberIds);
+            })->orWhere(function($q) use ($userId, $memberIds) {
+                $q->whereIn('blocker_id', $memberIds)->where('blocked_id', $userId);
+            })->exists();
 
             return [
                 'chat_with' => [
@@ -362,11 +586,17 @@ $msg->status = $status ? $status->status : 'sent';
                 'created_at' => $lastMessage
                     ? $lastMessage->created_at
                     : $group->created_at,
+
+                'unread_count' => $unreadCount,
+                'is_block' => $isBlock,
             ];
         });
 
     return $this->apiResponse('User groups fetched', $groups);
 }
+
+
+
 
 
      public function markGroupAsRead(Request $request)
@@ -386,7 +616,7 @@ $msg->status = $status ? $status->status : 'sent';
         // Update all messages in that group for this user
         $updated = GroupMessageStatus::where('receiver_id', $userId)
                     ->where('group_id', $groupId)
-                    ->update(['status' => 'seen']);
+                    ->update(['status' => 'read']);
 
         $updatedtime = GroupMessageStatus::where('receiver_id', $userId)
                     ->where('group_id', $groupId)
@@ -455,20 +685,6 @@ $msg->status = $status ? $status->status : 'sent';
     ]);
 }
 
-
-
-
-//     return response()->json([
-//     'data' => [
-//         'receiver_id' => $receiver_id,
-//         'updated_rows' => $updatedRows,
-//         'messages' => $messages->map(fn($m) => [
-//             'id' => $m->id,
-//             'group_id' => $m->group_id,
-//             'sender_id' => $m->sender_id,
-//         ])
-//     ]
-// ]);
 
   public function groupChatMedia($groupId)
 {

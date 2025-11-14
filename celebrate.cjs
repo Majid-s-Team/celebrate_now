@@ -13,6 +13,9 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 const LARAVEL_API_URL = "https://celebratenow.retrocubedev.com";
 
+// const LARAVEL_API_URL = "http://127.0.0.1:8000";
+
+
 let onlineUsers = new Map();
 let activeChats = new Map();
 let activeGroupChats = new Map(); // Track open group chats
@@ -485,7 +488,7 @@ socket.on("send_group_message", async (rawData) => {
         let status = "sent";
 
         if (activeGroupChats.has(m.user_id) && activeGroupChats.get(m.user_id).has(group_id)) {
-          status = "seen";
+          status = "read";
           await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
             receiver_id: m.user_id,
             group_id,
@@ -573,18 +576,24 @@ socket.on("get_group_history", async (rawData) => {
 
     // Fetch full group history
     const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${receiver_id}`);
-    const messages = res.data.data || [];
+    let messages = res.data.data || [];
+messages = Array.isArray(messages) ? messages : Object.values(messages);
+    // console.log("************************BLOCK LOGIC ******************************");
+    // console.log(messages);
 
     // Emit full history to receiver
     socket.emit("group_history", messages);
 
     // Filter unread messages
-    const unreadMessages = messages.filter(m => m.group_id === group_id && m.status !== 'seen');
+    const unreadMessages = messages.filter(m => m.group_id === group_id && m.status !== 'read');
     const unreadIds = unreadMessages.map(m => m.id);
     const status = unreadMessages.map(m => m.status);
 
     if (unreadIds.length > 0) {
       // Mark messages as seen in backend
+            console.log("?????????????????????????????????????????????????");
+            console.log(unreadMessages);
+
      const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
         receiver_id,
         group_id,
@@ -596,7 +605,7 @@ socket.on("get_group_history", async (rawData) => {
       console.log("?????????????????????????????????????????????????");
       console.log(mss);
 
-      let status='seen';
+      let status='read';
 
       // Emit status update to receiver
       socket.emit("group_status_update", {

@@ -123,6 +123,10 @@ php artisan migrate --path=/database/migrations/2025_10_17_164818_create_group_m
 ALTER TABLE `groups`
 ADD COLUMN `profile_image` VARCHAR(255) NULL AFTER `name`;
 
+ALTER TABLE group_message_status
+ADD COLUMN status ENUM('sent', 'delivered', 'seen') NOT NULL DEFAULT 'sent';
+
+
 
 
 
