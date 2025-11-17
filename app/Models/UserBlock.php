@@ -34,6 +34,12 @@ class UserBlock extends Model
         ->where('is_active', true)
         ->exists();
 }
+
+public static function isBlockedEitherWay($userA, $userB)
+{
+    return self::isBlocked($userA, $userB) || self::isBlocked($userB, $userA);
+}
+
     public static function unblock($blockerId, $blockedId)
     {
         self::where('blocker_id', $blockerId)

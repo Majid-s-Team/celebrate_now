@@ -16,7 +16,7 @@ class GroupMessageStatus extends Model
         'sender_id',
         'receiver_id',
         'message_id',
-        'is_read',
+        'hidden_for_receiver',
         'status'
     ];
 
