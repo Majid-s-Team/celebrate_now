@@ -284,28 +284,52 @@ socket.on("register", async (rawData) => {
   });
 
   // ------------------ GROUP CHAT SECTION ------------------
-  socket.on("create_group", async (rawData) => {
+socket.on("create_group", async (rawData) => {
+  try {
+    const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
+    const { name, profile_image, created_by, description, members = [] } = data;
+    console.log("[DEBUG] create_group called with:", data);
+
+    if (!name || !created_by) {
+      socket.emit("error", { message: "Both name and created_by are required" });
+      return;
+    }
+
+    // 1️⃣ Create group
+    const res = await axios.post(`${LARAVEL_API_URL}/api/groups/create`, {
+      name, profile_image, created_by, description, members,
+    });
+
+    const newGroup = res.data.data;
+    console.log("[DEBUG] Group created:", newGroup);
+
+    // 2️⃣ Emit group_created to creator
+    socket.emit("group_created", newGroup);
+
+    // 3️⃣ Fetch updated inbox + group list (same as register)
     try {
-      const data = typeof rawData === "string" ? JSON.parse(rawData) : rawData;
-      const { name, profile_image, created_by, description, members = [] } = data;
-      console.log("[DEBUG] create_group called with:", data);
+      const inboxRes = await axios.get(`${LARAVEL_API_URL}/api/socket/messages/inbox/${created_by}`);
+      const inboxData = inboxRes.data?.data?.map(i => ({ ...i, is_group: false })) || [];
 
-      if (!name || !created_by) {
-        socket.emit("error", { message: "Both name and created_by are required" });
-        return;
-      }
+      const groupRes = await axios.get(`${LARAVEL_API_URL}/api/groups/user/${created_by}`);
+      const groupData = groupRes.data?.data?.map(g => ({ ...g, is_group: true })) || [];
 
-      const res = await axios.post(`${LARAVEL_API_URL}/api/groups/create`, {
-        name, profile_image, created_by, description, members,
-      });
-      console.log("[DEBUG] Group created:", res.data.data);
-      socket.emit("group_created", res.data.data);
+      const combinedInbox = [...inboxData, ...groupData];
+
+      // 4️⃣ Send updated inbox_list to creator
+      socket.emit("inbox_list", combinedInbox);
+
+      console.log("[DEBUG] Updated inbox_list emitted after group create");
 
     } catch (err) {
-      console.error("[ERROR] create_group error:", err.response?.data || err.message);
-      socket.emit("error", { message: "Failed to create group" });
+      console.log("[ERROR] Failed to refresh inbox after group create:", err.message);
     }
-  });
+
+  } catch (err) {
+    console.error("[ERROR] create_group error:", err.response?.data || err.message);
+    socket.emit("error", { message: "Failed to create group" });
+  }
+});
 
   socket.on("add_member", async (rawData) => {
     try {
