@@ -211,6 +211,7 @@ Route::prefix('socket/messages')->group(function () {
     Route::post('/', [MessageController::class, 'socketStore']);
     Route::get('/history/{user1}/{user2}', [MessageController::class, 'chatHistory']);
     Route::get('/unseen/{user_id}', [MessageController::class, 'unseenMessages']);
+    Route::get('/pending/{user_id}', [MessageController::class, 'undeliveredMessages']);
     Route::post('/seen', action: [MessageController::class, 'markSeen']);
     Route::post('/delivered', action: [MessageController::class, 'markDelivered']);
 
