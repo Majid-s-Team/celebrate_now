@@ -163,6 +163,23 @@ public function chatHistory($user1, $user2)
     }
 
     /**
+     * Unseen messages
+     */
+    public function undeliveredMessages($user_id)
+    {
+        $messages = Message::with(['sender:id,first_name,last_name,profile_image,email', 'receiver:id,first_name,last_name,profile_image,email'])
+            ->where('receiver_id', $user_id)
+            ->where('status', 'sent')
+            ->where('hidden_for_receiver', false)
+            ->orderByDesc('created_at')
+            ->get();
+
+        Message::whereIn('id', $messages->pluck('id'))->update(['status' => 'sent']);
+
+        return $this->apiResponse('Unseen messages fetched', $messages);
+    }
+
+    /**
      * Mark as seen
      */
     public function markSeen(Request $request)
@@ -194,14 +211,12 @@ public function chatHistory($user1, $user2)
     /**
      * Inbox list
      */
-   public function inbox($user_id)
+public function inbox($user_id)
 {
-    // 🔹 Get list of users blocked by the current user
     $blockedUsers = UserBlock::where('blocker_id', $user_id)
         ->where('is_active', true)
         ->pluck('blocked_id');
 
-    // 🔹 Fetch inbox (including blocked users)
     $inbox = Message::selectRaw('
         CASE WHEN sender_id = ? THEN receiver_id ELSE sender_id END as chat_with_id,
         MAX(created_at) as last_message_time
@@ -213,6 +228,7 @@ public function chatHistory($user1, $user2)
         ->groupBy('chat_with_id')
         ->get()
         ->map(function ($chat) use ($user_id, $blockedUsers) {
+
             $lastMsg = Message::where(function ($q) use ($user_id, $chat) {
                     $q->where('sender_id', $user_id)
                       ->where('receiver_id', $chat->chat_with_id);
@@ -227,6 +243,9 @@ public function chatHistory($user1, $user2)
 
             if (!$lastMsg) return null;
 
+            $chatWithUser = User::withoutGlobalScopes()->withTrashed()->find($chat->chat_with_id);
+            if (!$chatWithUser) return null;
+
             // 🔹 Unread message count
             $unreadCount = Message::where('receiver_id', $user_id)
                 ->where('sender_id', $chat->chat_with_id)
@@ -234,17 +253,18 @@ public function chatHistory($user1, $user2)
                 ->where('hidden_for_receiver', false)
                 ->count();
 
-            // Check if current user has blocked this user
+            // 🔹 Check if user is blocked by current user
             $isBlocked = $blockedUsers->contains($chat->chat_with_id);
 
             return [
-                'chat_with' => $lastMsg->sender_id == $user_id ? $lastMsg->receiver : $lastMsg->sender,
+                'chat_with' => $chatWithUser,
                 'last_message' => $lastMsg->message,
                 'media_url' => $lastMsg->media_url,
                 'message_type' => $lastMsg->message_type ?? 'text',
                 'created_at' => $lastMsg->created_at,
                 'unreadCount' => $unreadCount,
-                'is_blocked' => $isBlocked, // Add is_blocked flag
+                'is_blocked' => $isBlocked,
+                'is_deleted' => $chatWithUser->deleted_at ? true : false,
             ];
         })
         ->filter()
@@ -252,6 +272,8 @@ public function chatHistory($user1, $user2)
 
     return $this->apiResponse('Inbox loaded', $inbox);
 }
+
+
 
 
     /**
