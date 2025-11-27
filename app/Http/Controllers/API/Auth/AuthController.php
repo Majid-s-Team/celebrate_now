@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\UserBlock;
 use App\Models\Follow;
+use App\Models\GroupMember;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use App\Models\UserOtp;
@@ -402,6 +403,10 @@ $existingUser = User::withTrashed()->where('email', $request->email)->first();
 
             // Soft delete the user (sets 'deleted_at' timestamp)
             $user->delete();
+
+            $groupmember = GroupMember::where('user_id',$userId);
+            //hard delete user from gorup
+            $groupmember->forceDelete();
 
             return response()->json([
                 'status' => 'success',

@@ -13,7 +13,7 @@ class GroupMessage extends Model
     }
 
     public function sender() {
-        return $this->belongsTo(User::class, 'sender_id');
+        return $this->belongsTo(User::class, 'sender_id')->withoutGlobalScopes()->withTrashed();
     }
     public function statuses()
 {
