@@ -246,56 +246,67 @@ if (deliveredGroupData.updated_rows > 0 && Array.isArray(deliveredGroupData.mess
     }
 
     // ----------------------- 2️⃣ Group chat -----------------------
-    else if (group_id) {
+   else if (group_id) {
 
-      // ⭐ REALTIME ENABLED
-      socket.join(`group_${group_id}`);
+  // ⭐ REALTIME ENABLED
+  socket.join(`group_${group_id}`);
 
-      const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
-      let messages = res.data.data || [];
-      messages = Array.isArray(messages) ? messages : Object.values(messages);
+  const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
+  let messages = res.data.data || [];
+  messages = Array.isArray(messages) ? messages : Object.values(messages);
 
-      socket.emit("chat_history", messages);
-      console.log("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM",messages);
+  socket.emit("chat_history", messages);
+  console.log("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", messages);
 
-      const unreadMessages = messages.filter(m => m.group_id === group_id && m.status !== 'read');
-      const unreadIds = unreadMessages.map(m => m.id);
+  const unreadMessages = messages.filter(m =>
+    m.group_id === group_id && m.status !== 'read'
+  );
 
-      if (unreadIds.length > 0) {
-        const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
-          receiver_id: user_id,
-          group_id,
-          message_ids: unreadIds,
-        });
+  const unreadIds = unreadMessages.map(m => m.id);
 
-        const status = 'read';
+  if (unreadIds.length > 0) {
 
-const sentGroupData = reso.data?.data || {};
-        const updated = unreadMessages.map(m => ({
-          id: m.id,
-          status,
-          group_id,
-          sender_id: m.sender_id,
-          receiver_id: user_id,
-          message: m.message,
-          is_group: true,
-        receiver: sentGroupData.receiver ?? 0
+    const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
+      receiver_id: user_id,
+      group_id,
+      message_ids: unreadIds,
+    });
 
-        }));
+    const status = 'read';
+    const sentGroupData = reso.data?.data || {};
 
-        socket.emit("status_update", updated);
+    const updated = unreadMessages.map(m => ({
+      id: m.id,
+      status,
+      group_id,
+      sender_id: m.sender_id,
+      receiver_id: user_id,
+      message: m.message,
+      is_group: true,
+      receiver: sentGroupData.receiver ?? 0
+    }));
 
-        const uniqueSenderIds = [...new Set(unreadMessages.map(m => m.sender_id))];
-        for (const senderId of uniqueSenderIds) {
-          if (senderId === user_id) continue;
-          const senderSocket = onlineUsers.get(senderId);
-          if (senderSocket) senderSocket.emit("status_update", updated);
-        }
-      }
-
-      if (!activeGroupChats.has(user_id)) activeGroupChats.set(user_id, new Set());
-      activeGroupChats.get(user_id).add(group_id);
+    // ❌ DO NOT SEND STATUS UPDATE TO SELF (YOUR OWN SENT MESSAGES)
+    const hasMessagesFromOthers = unreadMessages.some(m => m.sender_id !== user_id);
+    if (hasMessagesFromOthers) {
+      socket.emit("status_update", updated);
     }
+
+    // SEND ONLY TO OTHER SENDERS (NOT SELF)
+    const uniqueSenderIds = [...new Set(unreadMessages.map(m => m.sender_id))];
+
+    for (const senderId of uniqueSenderIds) {
+      if (senderId === user_id) continue; // ❌ skip self
+
+      const senderSocket = onlineUsers.get(senderId);
+      if (senderSocket) senderSocket.emit("status_update", updated);
+    }
+  }
+
+  if (!activeGroupChats.has(user_id)) activeGroupChats.set(user_id, new Set());
+  activeGroupChats.get(user_id).add(group_id);
+}
+
 
   } catch (err) {
     console.error("[ERROR] get_chat_history error:", err.message);

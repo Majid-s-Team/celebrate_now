@@ -110,7 +110,7 @@ public function updateGroup(Request $request, $groupId)
     /**
      * Add multiple members to an existing group
      */
-   public function addMember(Request $request, $groupId)
+  public function addMember(Request $request, $groupId)
 {
     $validator = Validator::make($request->all(), [
         'added_by' => 'required|exists:users,id',
@@ -126,7 +126,7 @@ public function updateGroup(Request $request, $groupId)
     $group = Group::findOrFail($groupId);
     $addedByUser = User::find($request->added_by);
 
-    // Only group creator or admins can add members
+    // Only group creator can add
     if ($group->created_by != $request->added_by) {
         return $this->apiResponse('Only the group creator can add members', null, 403);
     }
@@ -134,33 +134,61 @@ public function updateGroup(Request $request, $groupId)
     $addedMembers = [];
 
     foreach ($request->members as $memberData) {
-        $member = GroupMember::firstOrCreate(
+
+        $memberId = $memberData['id'];
+
+        // ---- IMPORTANT ----
+        // Check if user is already active in group
+        $active = GroupMembership::where('group_id', $groupId)
+            ->where('user_id', $memberId)
+            ->whereNull('left_at')
+            ->first();
+
+        if ($active) {
+            // Already a member
+            continue;
+        }
+
+        // Create NEW membership interval
+        GroupMembership::create([
+            'group_id' => $groupId,
+            'user_id' => $memberId,
+            'joined_at' => now(),
+            'left_at' => null
+        ]);
+
+        // Optional: maintain group_members table
+        GroupMember::updateOrCreate(
             [
                 'group_id' => $groupId,
-                'user_id' => $memberData['id']
+                'user_id' => $memberId,
             ],
             [
-                'can_see_past_messages' => $memberData['can_see_past_messages'] ?? true
+                'can_see_past_messages' => $memberData['can_see_past_messages'] ?? true,
+                'is_active' => 1
             ]
         );
 
-        $addedMembers[] = $member->user->first_name . ' ' . $member->user->last_name;
+        $addedMembers[] = User::find($memberId)->first_name;
     }
 
-    // Create a system message in group_messages
-    $messageText = $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
-    GroupMessage::create([
-        'group_id' => $groupId,
-        'sender_id' => $request->added_by,
-        'message' => $messageText,
-        'message_type' => 'system'
-    ]);
+    if (!empty($addedMembers)) {
+        $messageText = $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
+
+        GroupMessage::create([
+            'group_id' => $groupId,
+            'sender_id' => $request->added_by,
+            'message' => $messageText,
+            'message_type' => 'system'
+        ]);
+    }
 
     return $this->apiResponse('Members added successfully', [
         'added_by' => $addedByUser,
         'added_members' => $addedMembers
     ]);
 }
+
 
   public function removeMember(Request $request, $groupId)
 {
@@ -664,7 +692,7 @@ public function leaveGroup(Request $request, $groupId)
     }
 
     // Remove member
-    $member->delete();
+    $member->forceDelete();
 
     // Check remaining members
     $remainingMembers = GroupMember::where('group_id', $groupId)->pluck('user_id')->toArray();
