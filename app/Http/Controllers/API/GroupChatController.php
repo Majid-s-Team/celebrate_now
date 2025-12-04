@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus, User,UserBlock};
+use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus,GroupMembership, User,UserBlock};
 use App\Traits\ApiResponseTrait;
 use Illuminate\Support\Facades\Validator;
 
@@ -15,7 +15,7 @@ class GroupChatController extends Controller
     /**
      * Create a new group (with optional members)
      */
-    public function create(Request $request)
+public function create(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
@@ -31,47 +31,86 @@ class GroupChatController extends Controller
         return $this->apiResponse('Validation failed', $validator->errors(), 422);
     }
 
-    // Create group
-    $group = Group::create([
-        'name' => $request->name,
-        'profile_image' => $request->profile_image,
-        'description' => $request->description,
-        'created_by' => $request->created_by,
-    ]);
+    \DB::beginTransaction();
+    try {
+        // 1️⃣ Create group
+        $group = Group::create([
+            'name' => $request->name,
+            'profile_image' => $request->profile_image,
+            'description' => $request->description,
+            'created_by' => $request->created_by,
+        ]);
 
-    // Add creator as member (always true)
-    GroupMember::firstOrCreate([
-        'group_id' => $group->id,
-        'user_id' => $request->created_by,
-    ], ['can_see_past_messages' => true]);
+        // 2️⃣ Add creator as membership (role: admin)
+        $creatorMembership = GroupMembership::create([
+            'group_id' => $group->id,
+            'user_id' => $request->created_by,
+            'role' => 'admin',
+            'can_see_past_messages' => true, // creator always sees past messages
+        ]);
 
-    // Add provided members with optional per-member settings
-    if ($request->has('members')) {
-        foreach ($request->members as $member) {
-            if ($member['id'] == $request->created_by) continue;
+        // Sync to group_members table
+        GroupMember::updateOrCreate(
+            [
+                'group_id' => $group->id,
+                'user_id' => $request->created_by,
+            ],
+            [
+                'current_membership_id' => $creatorMembership->id,
+                'is_active' => true,
+            ]
+        );
 
-            GroupMember::firstOrCreate(
-                [
+        // 3️⃣ Add provided members (role: member)
+        if ($request->has('members')) {
+            foreach ($request->members as $member) {
+                $memberId = $member['id'];
+                if ($memberId == $request->created_by) continue;
+
+                // Determine can_see_past_messages
+                $canSeePast = $member['can_see_past_messages'] ?? true;
+
+                // Create membership
+                $membership = GroupMembership::create([
                     'group_id' => $group->id,
-                    'user_id' => $member['id']
-                ],
-                [
-                    'can_see_past_messages' => $member['can_see_past_messages'] ?? true
-                ]
-            );
+                    'user_id' => $memberId,
+                    'role' => 'member',
+                    'can_see_past_messages' => $canSeePast,
+                ]);
+
+                // Sync to group_members table
+                GroupMember::updateOrCreate(
+                    [
+                        'group_id' => $group->id,
+                        'user_id' => $memberId,
+                    ],
+                    [
+                        'current_membership_id' => $membership->id,
+                        'is_active' => true,
+                         'can_see_past_messages' => $canSeePast, // ✅ important
+                    ]
+                );
+            }
         }
+
+        // 4️⃣ Fetch members with user details
+        $members = GroupMember::where('group_id', $group->id)
+            ->with('user:id,first_name,last_name,profile_image')
+            ->get();
+
+        \DB::commit();
+
+        return $this->apiResponse('Group created successfully', [
+            'group' => $group,
+            'members' => $members
+        ]);
+    } catch (\Exception $e) {
+        \DB::rollBack();
+        return $this->apiResponse('Group creation failed', $e->getMessage(), 500);
     }
-
-    // Fetch members with user details
-    $members = GroupMember::where('group_id', $group->id)
-        ->with('user:id,first_name,last_name,profile_image')
-        ->get();
-
-    return $this->apiResponse('Group created successfully', [
-        'group' => $group,
-        'members' => $members
-    ]);
 }
+
+
 
 /**
  *
@@ -110,7 +149,7 @@ public function updateGroup(Request $request, $groupId)
     /**
      * Add multiple members to an existing group
      */
-  public function addMember(Request $request, $groupId)
+public function addMember(Request $request, $groupId)
 {
     $validator = Validator::make($request->all(), [
         'added_by' => 'required|exists:users,id',
@@ -131,66 +170,100 @@ public function updateGroup(Request $request, $groupId)
         return $this->apiResponse('Only the group creator can add members', null, 403);
     }
 
-    $addedMembers = [];
+    \DB::beginTransaction();
+    try {
 
-    foreach ($request->members as $memberData) {
+        $addedMembers = [];
 
-        $memberId = $memberData['id'];
+        foreach ($request->members as $memberData) {
 
-        // ---- IMPORTANT ----
-        // Check if user is already active in group
-        $active = GroupMembership::where('group_id', $groupId)
-            ->where('user_id', $memberId)
-            ->whereNull('left_at')
-            ->first();
+            $memberId = $memberData['id'];
+            $canSeePast = $memberData['can_see_past_messages'] ?? true;
 
-        if ($active) {
-            // Already a member
-            continue;
-        }
+            // Fetch current group_members record
+            $gm = GroupMember::where('group_id', $groupId)
+                ->where('user_id', $memberId)
+                ->first();
 
-        // Create NEW membership interval
-        GroupMembership::create([
-            'group_id' => $groupId,
-            'user_id' => $memberId,
-            'joined_at' => now(),
-            'left_at' => null
-        ]);
+            // ⭐ CASE 1: User is already active → skip
+            if ($gm && $gm->is_active) {
+                continue;
+            }
 
-        // Optional: maintain group_members table
-        GroupMember::updateOrCreate(
-            [
+            // ⭐ CASE 2: User left before → CREATE NEW membership (do NOT reuse old)
+            if ($gm && !$gm->is_active) {
+
+                // Create a new membership interval
+                $newMembership = GroupMembership::create([
+                    'group_id' => $groupId,
+                    'user_id' => $memberId,
+                    'role' => 'member',
+                ]);
+
+                // Update group_members only (no new row)
+                $gm->current_membership_id = $newMembership->id;
+                $gm->is_active = 1;
+                $gm->can_see_past_messages = $canSeePast;
+                $gm->save();
+
+                $addedMembers[] = User::find($memberId)->first_name;
+                continue;
+            }
+
+            // ⭐ CASE 3: New member
+            $newMembership = GroupMembership::create([
                 'group_id' => $groupId,
                 'user_id' => $memberId,
-            ],
-            [
-                'can_see_past_messages' => $memberData['can_see_past_messages'] ?? true,
-                'is_active' => 1
-            ]
-        );
+                'role' => 'member',
+            ]);
 
-        $addedMembers[] = User::find($memberId)->first_name;
-    }
+            GroupMember::updateOrCreate(
+                [
+                    'group_id' => $groupId,
+                    'user_id' => $memberId,
+                ],
+                [
+                    'current_membership_id' => $newMembership->id,
+                    'is_active' => true,
+                    'can_see_past_messages' => $canSeePast,
+                ]
+            );
 
-    if (!empty($addedMembers)) {
-        $messageText = $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
+            $addedMembers[] = User::find($memberId)->first_name;
+        }
 
-        GroupMessage::create([
-            'group_id' => $groupId,
-            'sender_id' => $request->added_by,
-            'message' => $messageText,
-            'message_type' => 'system'
+        // Create system message
+        if (!empty($addedMembers)) {
+            $messageText =
+                $addedByUser->first_name . ' added ' . implode(', ', $addedMembers) . ' to the group.';
+
+            GroupMessage::create([
+                'group_id' => $groupId,
+                'sender_id' => $request->added_by,
+                'message' => $messageText,
+                'message_type' => 'system'
+            ]);
+        }
+
+        \DB::commit();
+
+        return $this->apiResponse('Members added successfully', [
+            'added_by' => $addedByUser,
+            'added_members' => $addedMembers
         ]);
-    }
 
-    return $this->apiResponse('Members added successfully', [
-        'added_by' => $addedByUser,
-        'added_members' => $addedMembers
-    ]);
+    } catch (\Exception $e) {
+        \DB::rollBack();
+        return $this->apiResponse('Failed to add members', $e->getMessage(), 500);
+    }
 }
 
 
-  public function removeMember(Request $request, $groupId)
+
+
+
+
+public function removeMember(Request $request, $groupId)
 {
     $validator = Validator::make($request->all(), [
         'removed_by' => 'required|exists:users,id',
@@ -205,36 +278,65 @@ public function updateGroup(Request $request, $groupId)
     $removedByUser = User::find($request->removed_by);
     $removedUser = User::find($request->user_id);
 
+    // Only group creator can remove
     if ($group->created_by != $request->removed_by) {
         return $this->apiResponse('Only the group creator can remove members', null, 403);
     }
 
+    // Creator cannot be removed
     if ($request->user_id == $group->created_by) {
         return $this->apiResponse('Group creator cannot be removed', null, 403);
     }
 
-    GroupMember::where('group_id', $groupId)
-        ->where('user_id', $request->user_id)
-        ->delete();
+    \DB::beginTransaction();
+    try {
+        // 1️⃣ Update group_members table
+        $groupMember = GroupMember::where('group_id', $groupId)
+            ->where('user_id', $request->user_id)
+            ->first();
 
-    // System message for removal
-    GroupMessage::create([
-        'group_id' => $groupId,
-        'sender_id' => $request->removed_by,
-        'message' => "{$removedUser->first_name} was removed by {$removedByUser->first_name}.",
-        'message_type' => 'system'
-    ]);
+        if ($groupMember) {
+            $groupMember->is_active = 0;
+            $groupMember->save();
+        }
 
-    return $this->apiResponse('Member removed successfully', [
-        'removed_by' => $removedByUser->first_name,
-        'removed_user' => $removedUser->first_name
-    ]);
+        // 2️⃣ Update latest GroupMembership row
+        $membership = GroupMembership::where('group_id', $groupId)
+            ->where('user_id', $request->user_id)
+            ->whereNull('left_at')
+            ->latest('joined_at')
+            ->first();
+
+        if ($membership) {
+            $membership->left_at = now();
+            $membership->save();
+        }
+
+        // 3️⃣ System message
+        GroupMessage::create([
+            'group_id' => $groupId,
+            'sender_id' => $request->removed_by,
+            'message' => "{$removedUser->first_name} was removed by {$removedByUser->first_name}.",
+            'message_type' => 'system'
+        ]);
+
+        \DB::commit();
+
+        return $this->apiResponse('Member removed successfully', [
+            'removed_by' => $removedByUser->first_name,
+            'removed_user' => $removedUser->first_name
+        ]);
+    } catch (\Exception $e) {
+        \DB::rollBack();
+        return $this->apiResponse('Failed to remove member', $e->getMessage(), 500);
+    }
 }
+
 
     /**
      * Send message (only if user is a group member)
      */
- public function sendMessage(Request $request)
+public function sendMessage(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'group_id' => 'required|exists:groups,id',
@@ -251,6 +353,7 @@ public function updateGroup(Request $request, $groupId)
     // --- Check sender is a group member ---
     $isMember = GroupMember::where('group_id', $request->group_id)
         ->where('user_id', $request->sender_id)
+        ->where('is_active',1)
         ->exists();
 
     if (!$isMember) {
@@ -258,11 +361,7 @@ public function updateGroup(Request $request, $groupId)
     }
 
     // --- Create message ---
-
-
-
-
-     $msg = GroupMessage::create($request->only([
+    $msg = GroupMessage::create($request->only([
         'group_id', 'sender_id', 'message', 'message_type', 'media_url'
     ]));
 
@@ -271,29 +370,51 @@ public function updateGroup(Request $request, $groupId)
     // --- Fetch all group members ---
     $members = GroupMember::with('user:id,first_name,last_name,profile_image')
         ->where('group_id', $request->group_id)
+        ->where('is_active',1)
         ->get();
 
     $memberStatusList = [];
+    $statusesForResponse = []; // history-style statuses
 
     foreach ($members as $member) {
+
         $status = 'sent';
 
         $isBlockedEitherWay =
-    UserBlock::isBlocked($member->user_id, $request->sender_id) ||
-    UserBlock::isBlocked($request->sender_id, $member->user_id);
+            UserBlock::isBlocked($member->user_id, $request->sender_id) ||
+            UserBlock::isBlocked($request->sender_id, $member->user_id);
 
-
-        // DB me sab ka status create karo (sender bhi)
+        // Create status record in DB
         $statusRecord = GroupMessageStatus::create([
             'group_id' => $request->group_id,
             'sender_id' => $request->sender_id,
             'receiver_id' => $member->user_id,
             'message_id' => $msg->id,
-            'hidden_for_receiver'=>$isBlockedEitherWay,
+            'hidden_for_receiver' => $isBlockedEitherWay,
             'status' => $status,
         ]);
 
-        // Response list me sender ko skip kar do
+        // --- HISTORY FORMAT STATUSES (sender == receiver SKIP) ---
+        if ($statusRecord->receiver_id != $statusRecord->sender_id) {
+
+            $statusesForResponse[] = [
+                'id' => $statusRecord->id,
+                'group_id' => $statusRecord->group_id,
+                'sender_id' => $statusRecord->sender_id,
+                'receiver_id' => $statusRecord->receiver_id,
+                'status' => $statusRecord->status,
+                'hidden_for_receiver' => $statusRecord->hidden_for_receiver,
+                'updated_at' => $statusRecord->updated_at,
+                'receiver' => [
+                    'id' => $member->user->id,
+                    'first_name' => $member->user->first_name,
+                    'last_name' => $member->user->last_name,
+                    'profile_image' => $member->user->profile_image,
+                ]
+            ];
+        }
+
+        // --- OLD RESPONSE FOR MEMBERS (SENDER SKIP) ---
         if ($member->user_id == $request->sender_id) {
             continue;
         }
@@ -308,88 +429,68 @@ public function updateGroup(Request $request, $groupId)
         ];
     }
 
-    // --- Final response with members list ---
+    // --- Final response ---
     $response = $msg->toArray();
     $response['members'] = $memberStatusList;
+    $response['statuses'] = $statusesForResponse; // history-style statuses
 
     return $this->apiResponse('Message sent', $response);
 }
 
+   public function getMembers($groupId)
+    {
+        $members = GroupMember::where('group_id', $groupId)
+            ->where('is_active',1)
+            ->with('user:id,first_name,last_name,profile_image')
+            ->get();
+
+        return $this->apiResponse('Members fetched', $members);
+    }
 
 
 public function history($groupId, $receiver_id)
 {
-    // Check if receiver is a group member
-    $member = GroupMember::where('group_id', $groupId)
+    // 1️⃣ Fetch all memberships for this user in the group, ordered by joined_at
+    $memberships = GroupMembership::where('group_id', $groupId)
         ->where('user_id', $receiver_id)
-        ->first();
+        ->orderBy('joined_at', 'asc')
+        ->get();
 
-    if (!$member) {
+    if ($memberships->isEmpty()) {
         return $this->apiResponse('User is not a group member', null, 403);
     }
 
+    // 2️⃣ Fetch group and creator
     $group = Group::select('id','created_by')->find($groupId);
     $creatorId = $group->created_by;
 
-    // Fetch messages
-    $query = GroupMessage::with([
+    // 3️⃣ Fetch messages in the group
+    $messages = GroupMessage::with([
         'sender:id,first_name,last_name,profile_image',
         'statuses' => function($q) {
             $q->whereColumn('receiver_id', '!=', 'sender_id')
               ->orderBy('receiver_id');
         },
         'statuses.receiver:id,first_name,last_name,profile_image'
-    ])->where('group_id', $groupId);
+    ])->where('group_id', $groupId)
+      ->orderBy('created_at')
+      ->get();
 
-    if (!$member->can_see_past_messages) {
-        $query->where('created_at', '>=', $member->created_at);
-    }
+    // 4️⃣ Filter messages based on membership intervals
+    $messages = $messages->filter(function ($msg) use ($memberships) {
+        foreach ($memberships as $m) {
+            $start = $m->joined_at;
+            $end = $m->left_at ?? now();
 
-    $messages = $query->orderBy('created_at')->get();
-
-    // Get all blocks involving receiver
-    $blocks = UserBlock::where(function ($q) use ($receiver_id) {
-            $q->where('blocker_id', $receiver_id)
-              ->orWhere('blocked_id', $receiver_id);
-        })
-        ->orderBy('blocked_at', 'asc')
-        ->get();
-
-    // Filter based on block + hidden_for_receiver
-    $messages = $messages->filter(function ($msg) use ($receiver_id, $blocks) {
-
-        $statusCheck = $msg->statuses->first();
-        if ($statusCheck && $statusCheck->hidden_for_receiver) {
-            return false;
-        }
-
-        foreach ($blocks as $block) {
-            if (!$block->is_active) continue;
-
-            $start = $block->blocked_at;
-            $end   = $block->unblocked_at;
-
-            // Receiver blocked sender
-            if ($block->blocker_id == $receiver_id && $block->blocked_id == $msg->sender_id) {
-                if ($msg->created_at >= $start && (!$end || $msg->created_at <= $end)) {
-                    return false;
-                }
-            }
-
-            // Sender blocked receiver
-            if ($block->blocker_id == $msg->sender_id && $block->blocked_id == $receiver_id) {
-                if ($msg->created_at >= $start && (!$end || $msg->created_at <= $end)) {
-                    return false;
-                }
+            if ($msg->created_at >= $start && $msg->created_at <= $end) {
+                return true;
             }
         }
-
-        return true;
+        return false;
     });
 
-    // CLUB STATUS + remove sender=receiver statuses
-    $messages->transform(callback: function ($msg) {
-
+    // 5️⃣ Club status + remove sender=receiver statuses
+    $messages->transform(function ($msg) {
         $statuses = $msg->statuses->filter(function($st) use ($msg) {
             return $st->receiver_id != $msg->sender_id;
         })->values();
@@ -402,36 +503,53 @@ public function history($groupId, $receiver_id)
         return $msg;
     });
 
-    // Personal status
+    // 6️⃣ Personal status
     $messages->transform(function ($msg) use ($receiver_id, $creatorId) {
-
         if ($receiver_id == $creatorId) {
             $status = $msg->statuses->where('receiver_id', '!=', $creatorId)->first();
         } else {
             $status = $msg->statuses->where('receiver_id', $receiver_id)->first();
         }
-
         $msg->status = $status->status ?? 'sent';
         return $msg;
     });
 
-    // Global info (receiver block)
+    // 7️⃣ Global block info
     $is_block = UserBlock::where('blocker_id', $receiver_id)
         ->where('is_active', true)
         ->exists();
 
-    // Per-message sender deleted check
-    $messages->transform(function ($msg) use ($is_block) {
+    // 8️⃣ Fetch current group member
+    $gm = GroupMember::where('group_id', $groupId)
+        ->where('user_id', $receiver_id)
+        ->first();
 
-       $is_sender_deleted = User::withoutGlobalScopes()
-    ->withTrashed()
-    ->where('id', $msg->sender_id)
-    ->whereNotNull('deleted_at')
-    ->exists();
+    // 9️⃣ Per-message sender deleted + is_left
+    $messages->transform(function ($msg) use ($is_block, $memberships, $gm) {
+        $is_sender_deleted = User::withoutGlobalScopes()
+            ->withTrashed()
+            ->where('id', $msg->sender_id)
+            ->whereNotNull('deleted_at')
+            ->exists();
 
+        // ✅ Determine if user had left at the time of this message
+        if ($gm && $gm->is_active == 0) {
+            $is_left = true;
+        } else {
+            $is_left = true;
+            foreach ($memberships as $m) {
+                $start = $m->joined_at;
+                $end = $m->left_at ?? now();
+                if ($msg->created_at >= $start && $msg->created_at <= $end) {
+                    $is_left = false;
+                    break;
+                }
+            }
+        }
 
         $msg->is_block = $is_block;
         $msg->is_deleted = $is_sender_deleted;
+        $msg->is_left = $is_left;
 
         return $msg;
     });
@@ -439,26 +557,7 @@ public function history($groupId, $receiver_id)
     return $this->apiResponse('Chat loaded', $messages->toArray());
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-    public function getMembers($groupId)
-    {
-        $members = GroupMember::where('group_id', $groupId)
-            ->with('user:id,first_name,last_name,profile_image')
-            ->get();
-
-        return $this->apiResponse('Members fetched', $members);
-    }
+// have to make the lower part according ot new db strucutre for membersship and group member.
 
 
 public function userGroups($userId)
@@ -471,31 +570,43 @@ public function userGroups($userId)
             'creator:id,first_name,last_name,profile_image'
         ])
         ->get()
-        ->sortByDesc(function ($group) use ($userId) {
-            // use latest visible message timestamp for sorting
-            $lastVisible = $group->messages()
-                ->whereHas('statuses', function($q) use ($userId) {
-                    $q->where('receiver_id', $userId)
-                      ->where('hidden_for_receiver', 0);
-                })
-                ->latest('created_at')
-                ->first();
-            return $lastVisible ? $lastVisible->created_at : $group->created_at;
-        })
-        ->values()
         ->map(function ($group) use ($userId) {
 
-            // 🔹 latest visible message for inbox
-            $lastMessage = $group->messages()
+            // 🔹 Get group member row
+            $gm = GroupMember::where('group_id', $group->id)
+                    ->where('user_id', $userId)
+                    ->first();
+
+            // 🔹 User left?
+            $is_left = $gm && $gm->is_active == 0;
+
+            // 🔹 Fetch all membership intervals
+            $memberships = GroupMembership::where('group_id', $group->id)
+                ->where('user_id', $userId)
+                ->orderBy('joined_at', 'asc')
+                ->get();
+
+            // 🔹 Filter last message based on membership intervals
+            $lastMessage = GroupMessage::where('group_id', $group->id)
                 ->whereHas('statuses', function($q) use ($userId) {
                     $q->where('receiver_id', $userId)
                       ->where('hidden_for_receiver', 0);
                 })
-                ->with('sender:id,first_name,last_name,profile_image')
-                ->latest('created_at')
+                ->orderBy('created_at', 'desc')
+                ->get()
+                ->filter(function($msg) use ($memberships) {
+                    foreach ($memberships as $m) {
+                        $start = $m->joined_at;
+                        $end   = $m->left_at ?? now();
+                        if ($msg->created_at >= $start && $msg->created_at <= $end) {
+                            return true;
+                        }
+                    }
+                    return false;
+                })
                 ->first();
 
-            // 🔹 unread count excluding hidden messages
+            // 🔹 unread count excluding hidden
             $unreadCount = GroupMessageStatus::where('receiver_id', $userId)
                 ->where('status', '!=', 'read')
                 ->where('hidden_for_receiver', 0)
@@ -525,6 +636,7 @@ public function userGroups($userId)
                         'profile_image' => $group->creator->profile_image,
                     ] : null,
                     'members_count' => $group->members->count(),
+                    'is_left' => $is_left,   // ✅ ADDED
                 ],
 
                 'last_message' => $lastMessage?->message ?? '',
@@ -537,16 +649,16 @@ public function userGroups($userId)
                 'unread_count' => $unreadCount,
                 'is_block' => $isBlock,
             ];
-        });
+        })
+        ->sortByDesc('created_at')
+        ->values();
 
     return $this->apiResponse('User groups fetched', $groups);
 }
 
 
 
-
-
-     public function markGroupAsRead(Request $request)
+public function markGroupAsRead(Request $request)
     {
         $validator = Validator::make($request->all(), [
             'receiver_id'  => 'required|exists:users,id',
@@ -559,6 +671,17 @@ public function userGroups($userId)
 
         $userId  = $request->receiver_id;
         $groupId = $request->group_id;
+
+        $leavestatus = GroupMember::where('group_id',$groupId)
+        ->where('user_id',$userId)
+        ->first();
+
+        if($leavestatus->is_active===0)
+        { return $this->apiResponse('This user has left the group', [
+
+        ]);}
+
+
 
         // Update all messages in that group for this user
         $updated = GroupMessageStatus::where('receiver_id', $userId)
@@ -580,7 +703,7 @@ public function userGroups($userId)
             'updated_at' =>$updatedtime->updated_at,
             'updated_rows' => $updated
         ]);
-    }
+}
 
 
   public function markGroupAsDelivered(Request $request)
@@ -614,6 +737,15 @@ public function userGroups($userId)
     $groupRecord = GroupMessageStatus::whereIn('message_id', $pendingMessages)->first();
     $groupId = $groupRecord ? $groupRecord->group_id : null;
     $senderId = $groupRecord ? $groupRecord->sender_id :null;
+
+    $leavestatus = GroupMember::where('group_id',$groupId)
+        ->where('user_id',$userId)
+        ->first();
+
+        if($leavestatus->is_active===0)
+        { return $this->apiResponse('This user has left the group', [
+
+        ]);}
 
 
     // ✅ 3️⃣ Update only "sent" → "delivered"
@@ -664,6 +796,7 @@ public function userGroups($userId)
 
     return $this->apiResponse('Group media loaded successfully', $mediaMessages);
 }
+
 public function leaveGroup(Request $request, $groupId)
 {
     $validator = Validator::make($request->all(), [
@@ -675,7 +808,6 @@ public function leaveGroup(Request $request, $groupId)
     }
 
     $group = Group::find($groupId);
-
     if (!$group) {
         return $this->apiResponse('Group not found', null, 404);
     }
@@ -691,54 +823,90 @@ public function leaveGroup(Request $request, $groupId)
         return $this->apiResponse('User is not a member of this group', null, 403);
     }
 
-    // Remove member
-    $member->forceDelete();
+    \DB::beginTransaction();
+    try {
 
-    // Check remaining members
-    $remainingMembers = GroupMember::where('group_id', $groupId)->pluck('user_id')->toArray();
+        // 1️⃣ Update group_members table (NO DELETE)
+        $member->is_active = 0;
+        $member->save();
 
-    // If creator left
-    if ($group->created_by == $request->user_id) {
-        if (count($remainingMembers) > 0) {
-            // Assign new creator — the earliest joined member
-            $newCreatorId = GroupMember::where('group_id', $groupId)
-                ->orderBy('created_at', 'asc')
-                ->value('user_id');
+        // 2️⃣ Update membership row → left_at = now()
+        $membership = GroupMembership::where('group_id', $groupId)
+            ->where('user_id', $request->user_id)
+            ->whereNull('left_at')
+            ->latest('joined_at')
+            ->first();
 
-            $group->update(['created_by' => $newCreatorId]);
+        if ($membership) {
+            $membership->left_at = now();
+            $membership->save();
+        }
 
-            // System message for creator change
-            GroupMessage::create([
-                'group_id' => $groupId,
-                'sender_id' => $newCreatorId,
-                'message' => "{$user->first_name} left the group. {$group->name}'s new admin is " . User::find($newCreatorId)->first_name . ".",
-                'message_type' => 'system'
-            ]);
+        // Remaining members
+        $remainingMembers = GroupMember::where('group_id', $groupId)
+            ->where('is_active', 1)
+            ->pluck('user_id')
+            ->toArray();
+
+
+        // 3️⃣ Creator leaving logic
+        if ($group->created_by == $request->user_id) {
+
+            if (count($remainingMembers) > 0) {
+
+                // assign new admin → earliest joined active member
+                $newCreatorId = GroupMember::where('group_id', $groupId)
+                    ->where('is_active', 1)
+                    ->orderBy('created_at', 'asc')
+                    ->value('user_id');
+
+                $group->update(['created_by' => $newCreatorId]);
+
+                // system message
+                GroupMessage::create([
+                    'group_id' => $groupId,
+                    'sender_id' => $newCreatorId,
+                    'message' => "{$user->first_name} left the group. {$group->name}'s new admin is " . User::find($newCreatorId)->first_name . ".",
+                    'message_type' => 'system'
+                ]);
+
+            } else {
+
+                // No members left
+                GroupMessage::create([
+                    'group_id' => $groupId,
+                    'sender_id' => $request->user_id,
+                    'message' => "{$user->first_name} left the group. No members remaining.",
+                    'message_type' => 'system'
+                ]);
+            }
+
         } else {
-            // No members left — just system message
+
+            // Normal member leave message
             GroupMessage::create([
                 'group_id' => $groupId,
                 'sender_id' => $request->user_id,
-                'message' => "{$user->first_name} left the group. No members remaining.",
+                'message' => "{$user->first_name} left the group.",
                 'message_type' => 'system'
             ]);
         }
-    } else {
-        // Normal member leave message
-        GroupMessage::create([
-            'group_id' => $groupId,
-            'sender_id' => $request->user_id,
-            'message' => "{$user->first_name} left the group.",
-            'message_type' => 'system'
-        ]);
-    }
 
-    return $this->apiResponse('User left the group successfully', [
-        'group_id' => $groupId,
-        'left_user' => $user->only(['id', 'first_name', 'last_name']),
-        'remaining_members' => count($remainingMembers)
-    ]);
+        \DB::commit();
+
+        return $this->apiResponse('You have left the group successfully', [
+            'group_id' => $groupId,
+            'left_user' => $user->only(['id', 'first_name', 'last_name']),
+            'remaining_members' => count($remainingMembers)
+        ]);
+
+    } catch (\Exception $e) {
+
+        \DB::rollBack();
+        return $this->apiResponse('Failed to leave group', $e->getMessage(), 500);
+    }
 }
+
 
 
 }
