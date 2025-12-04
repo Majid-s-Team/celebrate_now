@@ -140,55 +140,52 @@ io.on("connection", (socket) => {
       }
     }
 
-    //
-    // ============================================================
-    // GROUP MESSAGE DELIVERED SYSTEM
-    // ============================================================
-    //
-   const deliveredGroup = await axios.post(`${LARAVEL_API_URL}/api/groups/message/delivered`, {
-  receiver_id: user_id
+  // ============================================================
+// GROUP MESSAGE DELIVERED SYSTEM (REGISTER)
+// ============================================================
+const deliveredGroup = await axios.post(`${LARAVEL_API_URL}/api/groups/message/delivered`, {
+    receiver_id: user_id
 });
 
 const deliveredGroupData = deliveredGroup.data?.data || {};
 
 if (deliveredGroupData.updated_rows > 0 && Array.isArray(deliveredGroupData.message_ids)) {
-  for (const message_id of deliveredGroupData.message_ids) {
+    for (const message_id of deliveredGroupData.message_ids) {
 
-    // Emit to receiver
-    socket.emit("status_update", [{
-      id: message_id,
-      group_id: deliveredGroupData.group_id || null,
-      receiver_id: user_id,
-      updated_at: deliveredGroupData.updated_at || null,
-      status: "delivered",
-      is_group: true,
-
-      receiver: deliveredGroupData.receiver ?? 0
-    }]);
-
-    console.log(`[DEBUG] Delivered GROUP → receiver ${user_id}, msg ${message_id}`);
-
-    // Emit to sender
-    const sender_id = deliveredGroupData.sender_id;
-    const senderSocket = onlineUsers.get(sender_id);
-
-    if (senderSocket && sender_id !== user_id) {
-      senderSocket.emit("status_update", [{
-        id: message_id,
-        group_id: deliveredGroupData.group_id || null,
-        receiver_id: user_id,
-        sender_id,
-        updated_at: deliveredGroupData.updated_at || null,
-        status: "delivered",
-        is_group: true,
-
-        receiver: deliveredGroupData.receiver ?? 0
-      }]);
-
-          console.log(`[DEBUG] Delivered GROUP → sender ${sender_id}, msg ${message_id}`);
+        // Emit to receiver only if receiver_id is NOT the logged-in user
+        if (deliveredGroupData.receiver !== user_id) {
+            const receiverSocket = onlineUsers.get(deliveredGroupData.receiver);
+            if (receiverSocket) {
+                receiverSocket.emit("status_update", [{
+                    id: message_id,
+                    group_id: deliveredGroupData.group_id || null,
+                    receiver_id: deliveredGroupData.receiver,
+                    updated_at: deliveredGroupData.updated_at || null,
+                    status: "delivered",
+                    is_group: true
+                }]);
+                console.log(`[DEBUG] Delivered GROUP → receiver ${deliveredGroupData.receiver}, msg ${message_id}`);
+            }
         }
-      }
+
+        // Emit to sender (no change, always sent)
+        const sender_id = deliveredGroupData.sender_id;
+        const senderSocket = onlineUsers.get(sender_id);
+        if (senderSocket) {
+            senderSocket.emit("status_update", [{
+                id: message_id,
+                group_id: deliveredGroupData.group_id || null,
+                receiver_id: deliveredGroupData.receiver,
+                sender_id,
+                updated_at: deliveredGroupData.updated_at || null,
+                status: "delivered",
+                is_group: true
+            }]);
+            console.log(`[DEBUG] Delivered GROUP → sender ${sender_id}, msg ${message_id}`);
+        }
     }
+}
+
 
   } catch (err) {
     console.log("[ERROR] Failed in register:", err.message);
@@ -246,65 +243,61 @@ if (deliveredGroupData.updated_rows > 0 && Array.isArray(deliveredGroupData.mess
     }
 
     // ----------------------- 2️⃣ Group chat -----------------------
-   else if (group_id) {
+ // ----------------------- 2️⃣ Group chat -----------------------
+else if (group_id) {
 
-  // ⭐ REALTIME ENABLED
-  socket.join(`group_${group_id}`);
+    // ⭐ REALTIME ENABLED
+    socket.join(`group_${group_id}`);
 
-  const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
-  let messages = res.data.data || [];
-  messages = Array.isArray(messages) ? messages : Object.values(messages);
+    const res = await axios.get(`${LARAVEL_API_URL}/api/groups/history/${group_id}/${user_id}`);
+    let messages = res.data.data || [];
+    messages = Array.isArray(messages) ? messages : Object.values(messages);
 
-  socket.emit("chat_history", messages);
-  console.log("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", messages);
+    socket.emit("chat_history", messages);
+    console.log("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM", messages);
 
-  const unreadMessages = messages.filter(m =>
-    m.group_id === group_id && m.status !== 'read'
-  );
+    const unreadMessages = messages.filter(m =>
+        m.group_id === group_id &&
+        m.status !== 'read' );
+    const unreadIds = unreadMessages.map(m => m.id);
 
-  const unreadIds = unreadMessages.map(m => m.id);
+    if (unreadIds.length > 0) {
 
-  if (unreadIds.length > 0) {
+        const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
+            receiver_id: user_id,
+            group_id,
+            message_ids: unreadIds,
+        });
 
-    const reso = await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
-      receiver_id: user_id,
-      group_id,
-      message_ids: unreadIds,
-    });
+        const status = 'read';
+        const sentGroupData = reso.data?.data || {};
 
-    const status = 'read';
-    const sentGroupData = reso.data?.data || {};
+        const updated = unreadMessages.map(m => ({
+            id: m.id,
+            status,
+            group_id,
+            sender_id: m.sender_id,
+            receiver_id: user_id,
+            message: m.message,
+            is_group: true,
+            receiver: sentGroupData.receiver ?? 0
+        }));
 
-    const updated = unreadMessages.map(m => ({
-      id: m.id,
-      status,
-      group_id,
-      sender_id: m.sender_id,
-      receiver_id: user_id,
-      message: m.message,
-      is_group: true,
-      receiver: sentGroupData.receiver ?? 0
-    }));
+        // if (updated.length > 0) {
+        //     socket.emit("status_update", updated); // sender fetching history still gets update for their unread messages if needed
+        // }
 
-    // ❌ DO NOT SEND STATUS UPDATE TO SELF (YOUR OWN SENT MESSAGES)
-    const hasMessagesFromOthers = unreadMessages.some(m => m.sender_id !== user_id);
-    if (hasMessagesFromOthers) {
-      socket.emit("status_update", updated);
+        // ----------------- ONLY SEND TO OTHER SENDERS -----------------
+        const uniqueSenderIds = [...new Set(unreadMessages.map(m => m.sender_id))];
+
+        for (const senderId of uniqueSenderIds) {
+            const senderSocket = onlineUsers.get(senderId);
+            if (senderSocket) senderSocket.emit("status_update", updated);
+        }
     }
 
-    // SEND ONLY TO OTHER SENDERS (NOT SELF)
-    const uniqueSenderIds = [...new Set(unreadMessages.map(m => m.sender_id))];
-
-    for (const senderId of uniqueSenderIds) {
-      if (senderId === user_id) continue; // ❌ skip self
-
-      const senderSocket = onlineUsers.get(senderId);
-      if (senderSocket) senderSocket.emit("status_update", updated);
-    }
-  }
-
-  if (!activeGroupChats.has(user_id)) activeGroupChats.set(user_id, new Set());
-  activeGroupChats.get(user_id).add(group_id);
+    if (!activeGroupChats.has(user_id)) activeGroupChats.set(user_id, new Set());
+    activeGroupChats.get(user_id).add(group_id);
 }
 
 
@@ -331,87 +324,88 @@ socket.on("send_message", async (rawData) => {
     // ---------------------------------------------------------
     // 1️⃣ GROUP MESSAGE
     // ---------------------------------------------------------
-  if (group_id) {
-  // Save group message
-  const res = await axios.post(`${LARAVEL_API_URL}/api/groups/message`, {
-    group_id,
-    sender_id,
-    message,
-    message_type,
-    media_url,
-  });
+ if (group_id) {
+    // Save group message
+    const res = await axios.post(`${LARAVEL_API_URL}/api/groups/message`, {
+        group_id,
+        sender_id,
+        message,
+        message_type,
+        media_url,
+    });
 
-  saved = res.data?.data;
-  if (!saved) return;
+    saved = res.data?.data;
+    if (!saved) return;
 
-  // Get group members
-  const membersRes = await axios.get(`${LARAVEL_API_URL}/api/groups/${group_id}/members`);
-  let members = membersRes.data.data;
+    // Get group members
+    const membersRes = await axios.get(`${LARAVEL_API_URL}/api/groups/${group_id}/members`);
+    let members = membersRes.data.data;
 
-  // Remove sender from members list
-  members = members.filter(m => m.user_id !== sender_id);
+    // Remove sender from members list
+    members = members.filter(m => m.user_id !== sender_id);
 
-  // Update statuses for each member except sender
-  const updatedMembers = await Promise.all(
-    members.map(async (m) => {
-      let status = "sent";
+    // Update statuses for each member except sender
+    const updatedMembers = await Promise.all(
+        members.map(async (m) => {
+            let status = "sent";
 
-      if (activeGroupChats.has(m.user_id) && activeGroupChats.get(m.user_id).has(group_id)) {
-        status = "read";
-        await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
-          receiver_id: m.user_id,
-          group_id,
-          message_ids: [saved.id],
-        });
-      } else if (registeredUsers.has(m.user_id)) {
-        status = "delivered";
-        await axios.post(`${LARAVEL_API_URL}/api/groups/message/delivered`, {
-          receiver_id: m.user_id,
-          group_id,
-          message_ids: [saved.id],
-        });
-      }
+            if (activeGroupChats.has(m.user_id) && activeGroupChats.get(m.user_id).has(group_id)) {
+                status = "read";
+                await axios.post(`${LARAVEL_API_URL}/api/groups/message/seen`, {
+                    receiver_id: m.user_id,
+                    group_id,
+                    message_ids: [saved.id],
+                });
+            } else if (registeredUsers.has(m.user_id)) {
+                status = "delivered";
+                await axios.post(`${LARAVEL_API_URL}/api/groups/message/delivered`, {
+                    receiver_id: m.user_id,
+                    group_id,
+                    message_ids: [saved.id],
+                });
+            }
 
-      const memberSocket = onlineUsers.get(m.user_id);
-      if (memberSocket) {
-        memberSocket.emit("receive_message", { ...saved, is_group: true });
+            const memberSocket = onlineUsers.get(m.user_id);
+            if (memberSocket && m.user_id !== sender_id) { // ❌ skip sender
+                memberSocket.emit("receive_message", { ...saved, is_group: true });
 
-        memberSocket.emit("status_update", [{
-          id: saved.id,
-          status,
-          sender_id,
-          receiver_id: m.user_id,
-          is_group: true,
-          group_id,
-          receiver: m.user
-        }]);
-      }
+                memberSocket.emit("status_update", [{
+                    id: saved.id,
+                    status,
+                    sender_id,
+                    receiver_id: m.user_id,
+                    is_group: true,
+                    group_id,
+                    receiver: m.user
+                }]);
+            }
 
-      return { user_id: m.user_id, status };
-    })
-  );
+            return { user_id: m.user_id, status };
+        })
+    );
 
-  saved.members = updatedMembers;
+    saved.members = updatedMembers;
 
-  // ⭐⭐⭐ NOW SENDER ALSO GETS STATUS_UPDATE ⭐⭐⭐
-const senderSocket = onlineUsers.get(sender_id);
-if (senderSocket) {
-  const senderStatusPayload = updatedMembers.map(m => ({
-    id: saved.id,
-    status: m.status,              // SAME STATUS
-    sender_id,
-    receiver_id: m.user_id,        // SAME RECEIVER ID
-    is_group: true,
-    group_id,
-    receiver: members.find(x => x.user_id === m.user_id)?.user || null
-  }));
+    // ⭐⭐⭐ NOW SENDER ALSO GETS STATUS_UPDATE ⭐⭐⭐
+    const senderSocket = onlineUsers.get(sender_id);
+    if (senderSocket) {
+        const senderStatusPayload = updatedMembers.map(m => ({
+            id: saved.id,
+            status: m.status,              // SAME STATUS
+            sender_id,
+            receiver_id: m.user_id,        // SAME RECEIVER ID
+            is_group: true,
+            group_id,
+            receiver: members.find(x => x.user_id === m.user_id)?.user || null
+        }));
 
-  senderSocket.emit("status_update", senderStatusPayload);
+        senderSocket.emit("status_update", senderStatusPayload);
+    }
+
+    // Send back to sender
+    socket.emit("message_sent", saved);
 }
 
-  // Send back to sender
-  socket.emit("message_sent", saved);
-}
 
     // ---------------------------------------------------------
     // 2️⃣ 1-1 MESSAGE

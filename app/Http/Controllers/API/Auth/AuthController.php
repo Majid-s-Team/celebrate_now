@@ -393,8 +393,6 @@ $existingUser = User::withTrashed()->where('email', $request->email)->first();
         return $this->sendResponse('User Blocked List', $userBlocks, 200);
     }
 
-
-
     public function softDeleteUser(Request $request, $userId)
     {
         try {
