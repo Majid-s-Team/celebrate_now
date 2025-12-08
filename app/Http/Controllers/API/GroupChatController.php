@@ -4,7 +4,7 @@ namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus,GroupMembership, User,UserBlock};
+use App\Models\{Group, GroupMember, GroupMessage,GroupMessageStatus,GroupMembership, User,UserBlock,ReportGroup,ReportReason};
 use App\Traits\ApiResponseTrait;
 use Illuminate\Support\Facades\Validator;
 
@@ -342,7 +342,7 @@ public function sendMessage(Request $request)
         'group_id' => 'required|exists:groups,id',
         'sender_id' => 'required|exists:users,id',
         'message' => 'nullable|string',
-        'message_type' => 'nullable|string|in:text,image,video,file,emoji,link',
+        'message_type' => 'nullable|string|in:text,audio,image,video,file,emoji,link',
         'media_url' => 'nullable|string',
     ]);
 
@@ -906,6 +906,76 @@ public function leaveGroup(Request $request, $groupId)
         return $this->apiResponse('Failed to leave group', $e->getMessage(), 500);
     }
 }
+
+public function reportGroup(Request $request, $groupID)
+{
+    // 1) Validate input
+    $validator = Validator::make($request->all(), [
+        'reported_by' => 'required|exists:users,id',
+        'report_reason_id' => 'required|exists:report_reasons,id',
+    ]);
+
+    if ($validator->fails()) {
+        return $this->apiResponse('Validation failed', $validator->errors(), 422);
+    }
+
+    // 2) Check if group exists
+    $group = Group::find($groupID);
+    if (!$group) {
+        return $this->apiResponse('Group not found', null, 404);
+    }
+
+    // 3) Check if user is member of group
+    $member = GroupMember::where('group_id', $groupID)
+        ->where('user_id', $request->reported_by)
+        ->first();
+
+    if (!$member) {
+        return $this->apiResponse('User is not a member of this group', null, 403);
+    }
+
+    // 4) Check if reason exists
+    $reason = ReportReason::find($request->report_reason_id);
+    if (!$reason) {
+        return $this->apiResponse('Report Reason Category does not exist', null, 404);
+    }
+
+    // 5) Check if user already reported this group
+    $existingReport = ReportGroup::where('group_id', $groupID)
+        ->where('reported_by', $request->reported_by)
+        ->latest() // get last report
+        ->first();
+
+    // If report exists → deactivate it
+    if ($existingReport && $existingReport->is_active) {
+        $existingReport->update([
+            'is_active' => false,
+            'un_reported_at' => now(),
+        ]);
+
+        return $this->apiResponse(
+            'Report deactivated successfully',
+            $existingReport,
+            200
+        );
+    }
+
+    // 6) Create new report
+    $newReport = ReportGroup::create([
+        'report_reason_id' => $request->report_reason_id,
+        'group_id'         => $groupID,
+        'reported_by'      => $request->reported_by,
+        'is_active'        => true,
+        'reported_at'      => now(),
+    ]);
+
+    return $this->apiResponse(
+        'Group reported successfully',
+        $newReport,
+        201
+    );
+}
+
 
 
 

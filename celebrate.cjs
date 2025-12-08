@@ -152,44 +152,35 @@ const deliveredGroupData = deliveredGroup.data?.data || {};
 if (deliveredGroupData.updated_rows > 0 && Array.isArray(deliveredGroupData.message_ids)) {
     for (const message_id of deliveredGroupData.message_ids) {
 
-        // Emit to receiver only if receiver_id is NOT the logged-in user
-        if (deliveredGroupData.receiver !== user_id) {
-            const receiverSocket = onlineUsers.get(deliveredGroupData.receiver);
-            if (receiverSocket) {
-                receiverSocket.emit("status_update", [{
+        const receiver = deliveredGroupData.receiver;
+        const receiver_id = deliveredGroupData.receiver.id;
+        const sender_id = deliveredGroupData.sender_id;
+
+        // ❌ Receiver ko status_update kabhi na bheje
+        // sirf sender ko bhejna hai
+        if (sender_id && sender_id !== receiver_id) {
+            const senderSocket = onlineUsers.get(sender_id);
+            if (senderSocket) {
+                senderSocket.emit("status_update", [{
                     id: message_id,
                     group_id: deliveredGroupData.group_id || null,
-                    receiver_id: deliveredGroupData.receiver,
+                    receiver_id,
+                    receiver,
+                    sender_id,     // sender ka ID
                     updated_at: deliveredGroupData.updated_at || null,
                     status: "delivered",
                     is_group: true
                 }]);
-                console.log(`[DEBUG] Delivered GROUP → receiver ${deliveredGroupData.receiver}, msg ${message_id}`);
+                console.log(`[DEBUG] Delivered GROUP → sender ${sender_id}, msg ${message_id}`);
             }
         }
 
-        // Emit to sender (no change, always sent)
-        const sender_id = deliveredGroupData.sender_id;
-        const senderSocket = onlineUsers.get(sender_id);
-        if (senderSocket) {
-            senderSocket.emit("status_update", [{
-                id: message_id,
-                group_id: deliveredGroupData.group_id || null,
-                receiver_id: deliveredGroupData.receiver,
-                sender_id,
-                updated_at: deliveredGroupData.updated_at || null,
-                status: "delivered",
-                is_group: true
-            }]);
-            console.log(`[DEBUG] Delivered GROUP → sender ${sender_id}, msg ${message_id}`);
-        }
     }
 }
 
-
-  } catch (err) {
+} catch (err) {
     console.log("[ERROR] Failed in register:", err.message);
-  }
+}
 });
 
 
@@ -283,29 +274,34 @@ else if (group_id) {
             receiver: sentGroupData.receiver ?? 0
         }));
 
-        // if (updated.length > 0) {
-        //     socket.emit("status_update", updated); // sender fetching history still gets update for their unread messages if needed
-        // }
-
         // ----------------- ONLY SEND TO OTHER SENDERS -----------------
         const uniqueSenderIds = [...new Set(unreadMessages.map(m => m.sender_id))];
 
         for (const senderId of uniqueSenderIds) {
+            // ❌ Skip the current receiver
+            if (senderId === user_id) continue;
+
             const senderSocket = onlineUsers.get(senderId);
-            if (senderSocket) senderSocket.emit("status_update", updated);
+            if (senderSocket) {
+                senderSocket.emit(
+                    "status_update",
+                    updated.filter(m => m.sender_id === senderId)
+                );
+            }
         }
     }
 
     if (!activeGroupChats.has(user_id)) activeGroupChats.set(user_id, new Set());
     activeGroupChats.get(user_id).add(group_id);
-}
 
+} // <-- closes else if (group_id)
 
-  } catch (err) {
+} catch (err) {
     console.error("[ERROR] get_chat_history error:", err.message);
     socket.emit("error", { message: "Failed to fetch chat history" });
-  }
-});
+} // <-- closes catch
+
+}); // <-- closes outer socket.on("get_chat_history", async (rawData) => { ... })
 
 
 
@@ -324,7 +320,7 @@ socket.on("send_message", async (rawData) => {
     // ---------------------------------------------------------
     // 1️⃣ GROUP MESSAGE
     // ---------------------------------------------------------
- if (group_id) {
+if (group_id) {
     // Save group message
     const res = await axios.post(`${LARAVEL_API_URL}/api/groups/message`, {
         group_id,
@@ -366,18 +362,10 @@ socket.on("send_message", async (rawData) => {
             }
 
             const memberSocket = onlineUsers.get(m.user_id);
-            if (memberSocket && m.user_id !== sender_id) { // ❌ skip sender
-                memberSocket.emit("receive_message", { ...saved, is_group: true });
 
-                memberSocket.emit("status_update", [{
-                    id: saved.id,
-                    status,
-                    sender_id,
-                    receiver_id: m.user_id,
-                    is_group: true,
-                    group_id,
-                    receiver: m.user
-                }]);
+            // Receiver only gets message, NOT status_update
+            if (memberSocket && m.user_id !== sender_id) {
+                memberSocket.emit("receive_message", { ...saved, is_group: true });
             }
 
             return { user_id: m.user_id, status };
@@ -386,14 +374,16 @@ socket.on("send_message", async (rawData) => {
 
     saved.members = updatedMembers;
 
-    // ⭐⭐⭐ NOW SENDER ALSO GETS STATUS_UPDATE ⭐⭐⭐
+    // ⭐⭐⭐ SENDER GETS STATUS_UPDATE ONLY ⭐⭐⭐
     const senderSocket = onlineUsers.get(sender_id);
-    if (senderSocket) {
+
+    // Additional check: ONLY actual sender receives the status_update
+    if (senderSocket && senderSocket.user_id === sender_id) {
         const senderStatusPayload = updatedMembers.map(m => ({
             id: saved.id,
-            status: m.status,              // SAME STATUS
+            status: m.status,
             sender_id,
-            receiver_id: m.user_id,        // SAME RECEIVER ID
+            receiver_id: m.user_id,
             is_group: true,
             group_id,
             receiver: members.find(x => x.user_id === m.user_id)?.user || null
@@ -405,6 +395,8 @@ socket.on("send_message", async (rawData) => {
     // Send back to sender
     socket.emit("message_sent", saved);
 }
+
+
 
 
     // ---------------------------------------------------------
