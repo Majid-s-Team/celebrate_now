@@ -47,6 +47,8 @@ Route::post('groups/{groupId}/remove-member', [GroupChatController::class, 'remo
 Route::post('/groups/update/{groupId}', [GroupChatController::class, 'updateGroup']);
 Route::get('/groups/{groupId}/media', [GroupChatController::class, 'groupChatMedia']);
 Route::post('/groups/leave/{groupId}', [GroupChatController::class, 'leaveGroup']);
+Route::post('reportGroup/{groupId}', [GroupChatController::class, 'reportGroup']);
+
 
 
 
@@ -201,6 +203,7 @@ Route::post('/groups/update/{groupId}', [GroupChatController::class, 'updateGrou
 Route::get('/groups/{groupId}/members', [GroupChatController::class, 'getMembers']);
 Route::post('/groups/message/seen', [GroupChatController::class, 'markGroupAsRead']);
 Route::post('/groups/message/delivered', [GroupChatController::class, 'markGroupAsDelivered']);
+
 
 
 
