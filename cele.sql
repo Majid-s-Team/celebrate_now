@@ -129,4 +129,102 @@ ADD COLUMN status ENUM('sent', 'delivered', 'seen') NOT NULL DEFAULT 'sent';
 
 
 
+ALTER TABLE group_message_status
+ADD COLUMN status ENUM('sent', 'delivered', 'seen') NOT NULL DEFAULT 'sent';
+
+
+	ALTER TABLE group_message_status 
+	CHANGE COLUMN is_read hidden_for_receiver TINYINT(1) NOT NULL DEFAULT 0;
+
+
+ALTER TABLE group_message_status
+MODIFY COLUMN status ENUM('sent', 'delivered', 'read') NOT NULL DEFAULT 'sent';
+
+UPDATE users
+SET deleted_at = NULL
+WHERE id = 3;
+
+SELECT * FROM group_message_status WHERE message_id=125;
+
+
+CREATE TABLE `group_memberships` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `group_id` BIGINT UNSIGNED NOT NULL,
+  `user_id` BIGINT UNSIGNED NOT NULL,
+  `joined_at` DATETIME NOT NULL,
+  `left_at` DATETIME NULL,
+  `role` VARCHAR(50) NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+
+  CONSTRAINT `fk_gm_group`
+    FOREIGN KEY (`group_id`) REFERENCES `groups` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `fk_gm_user`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
+    ON DELETE CASCADE,
+
+  INDEX `idx_gm_user_group` (`user_id`, `group_id`),
+  INDEX `idx_gm_group_join` (`group_id`, `joined_at`)
+);
+
+
+
+ALTER TABLE `group_members`
+ADD COLUMN `is_active` TINYINT(1) NOT NULL DEFAULT 1
+AFTER `user_id`;
+
+
+
+
+ALTER TABLE `group_members`
+ADD COLUMN `current_membership_id` BIGINT UNSIGNED NULL AFTER `user_id`,
+ADD CONSTRAINT `fk_current_membership`
+    FOREIGN KEY (`current_membership_id`)
+    REFERENCES `group_memberships` (`id`)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE;
+    
+    
+    
+    
+    CREATE TABLE report_group (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    report_reason_id BIGINT UNSIGNED NOT NULL,
+    group_id BIGINT UNSIGNED NOT NULL,
+    reported_by BIGINT UNSIGNED NOT NULL,
+
+    is_active BOOLEAN DEFAULT TRUE,
+    reported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    un_reported_at TIMESTAMP NULL DEFAULT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_report_reason
+        FOREIGN KEY (report_reason_id) 
+        REFERENCES report_reasons(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_report_group_group
+        FOREIGN KEY (group_id) 
+        REFERENCES `groups`(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_report_group_user
+        FOREIGN KEY (reported_by) 
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);
+
+
+
+
+
+
+
 
